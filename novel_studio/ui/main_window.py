@@ -24,12 +24,12 @@ from novel_studio.ai.engine import AIEngine
 from novel_studio.ai.context import ContextManager
 from novel_studio.ai.prompts import (chat_system, entity_extra, master as master_prompt,
                                      contract as contract_prompt,
-                                     master_plot as master_plot_prompt, idea as idea_prompt,
+                                     master_plot as master_plot_prompt, idea as idea_prompt, repair_chapter_plans,
                                      SECTIONS)
 from novel_studio.services.idea_service import IdeaService
 from novel_studio.planning.master_planner import MasterPlanner
 from novel_studio.plot.plot_manager import PlotManager
-from novel_studio.plot.parser import parse_chapter_plans
+from novel_studio.plot.parser import parse_chapter_plans, validate_chapter_plans
 from novel_studio.manuscript.chapter_writer import ChapterWriter
 from novel_studio.memory.memory_manager import MemoryManager
 from novel_studio.continuity.checker import ContinuityChecker
@@ -43,7 +43,7 @@ class MainWindow(QMainWindow):
     NAV=['기획','설정 DB','스토리 구간','화별 플롯','원고','기억 / 연속성']
     def __init__(self, project_root):
         super().__init__()
-        self.setWindowTitle('Novel Studio v1.0 Final')
+        self.setWindowTitle('Novel Studio v1.1.4')
         self.resize(1700, 1000)
         self.project_root = Path(project_root)
         self.pool = QThreadPool(self)
@@ -96,9 +96,22 @@ class MainWindow(QMainWindow):
         p=self.views[0]; p.masterBtn.clicked.connect(self.generate_master); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
         s = self.views[1]
         # EntitiesView는 __init__ 내부에서 add/save/del/AI 버튼을 자체 배선함
-        r=self.views[2]; r.generateBtn.clicked.connect(self.generate_sections); r.snapshotBtn.clicked.connect(self.generate_snapshot)
-        pl=self.views[3]; pl.generateBtn.clicked.connect(self.generate_chapter_plans); pl.allBtn.clicked.connect(self.generate_all_chapter_plans); pl.improveBtn.clicked.connect(self.improve_plot)
+        r=self.views[2]; r.generateBtn.clicked.connect(self.generate_sections); r.snapshotBtn.clicked.connect(self.generate_snapshot); r.saveBtn.clicked.connect(lambda: self._save_view_detail(r, '스토리 구간'))
+        pl=self.views[3]; pl.generateBtn.clicked.connect(self.generate_chapter_plans); pl.allBtn.clicked.connect(self.generate_all_chapter_plans); pl.improveBtn.clicked.connect(self.improve_plot); pl.saveBtn.clicked.connect(lambda: self._save_view_detail(pl, '화별 플롯'))
         m=self.views[4]; m.chapterList.currentRowChanged.connect(lambda row:self.load_chapter(row+1)); m.editor.textChanged.connect(self.update_count); self._wire_manuscript_buttons(m)
+    def _save_view_detail(self, view, label):
+        try:
+            ok = view.save_detail()
+        except Exception as e:
+            logger.exception('%s 저장 실패', label)
+            QMessageBox.critical(self, f'{label} 저장 실패', str(e))
+            return
+        if ok:
+            view.refresh()
+            QMessageBox.information(self, '저장 완료', f'{label}이(가) 저장되었습니다.')
+        else:
+            QMessageBox.information(self, '저장할 항목 없음', f'저장할 {label} 항목을 먼저 선택하세요.')
+
     def _build_top_dashboard(self):
         """요청 1: 대시보드를 상단 고정 바로 교체. 사이드바에서 제거하고 항상 보이게."""
         from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel
@@ -167,7 +180,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         QMessageBox.about(
             self, 'Novel Studio 정보',
-            '<b>Novel Studio</b> v1.0 Final<br><br>'
+            '<b>Novel Studio</b> v1.1.3<br><br>'
             '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
             '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
 
@@ -417,10 +430,41 @@ class MainWindow(QMainWindow):
                 self.db.set_meta('idea', t)
             return out
         self._run_stream('AI 마스터 기획 생성 중...', stream,
-                         lambda _: self.views[0].refresh(),
+                         lambda _: (self.views[0].refresh(), self._run('마스터 기획에서 인물 자동 동기화 중...', self.sync_master_characters, self._after_master_saved)),
                          append=self.views[0].masterEdit)
-    def save_master(self): self.db.save_plan(self.views[0].masterEdit.toPlainText()); self.statusBar().showMessage('마스터 기획 저장 완료')
-    def save_contract(self): self.db.save_contract(self.views[0].contractEdit.toPlainText(),False); self.statusBar().showMessage('핵심 기준 저장 완료')
+    def sync_master_characters(self):
+        """마스터 기획에서 남주/여주/조연 인물을 자동 추출해 설정 DB에 upsert한다."""
+        from novel_studio.ai.prompts import entity_catalog_prompt
+        from novel_studio.utils.entity_parser import parse_entity_catalog
+        master=self.db.get_plan().strip()
+        if not master:return 0
+        text=self.ai.generate(entity_catalog_prompt('인물',master,int(self.pm.settings.get('target_chapters',500) or 500)),temperature=.28,max_tokens=8000)
+        items=parse_entity_catalog(text); count=0
+        for x in items:
+            name=(x.get('name') or '').strip()
+            if not name:continue
+            self.db.save_character({'name':name,'role':x.get('role') or '조연','profile':x.get('profile',''),'personality':x.get('personality',''),'speech_style':x.get('speech_style',''),'goal':x.get('goal',''),'secret':x.get('secret',''),'arc':x.get('arc','')})
+            count+=1
+        return count
+
+    def _after_master_saved(self, _=None):
+        try:
+            n=self.sync_master_characters()
+            self.views[1].refresh()
+            self.statusBar().showMessage(f'마스터 기획 저장 완료 · 인물 DB {n}개 자동 동기화')
+        except Exception as e:
+            logger.warning('마스터→인물 자동 동기화 실패: %s',e)
+            self.views[1].refresh()
+            self.statusBar().showMessage('마스터 기획 저장 완료 · 인물 자동 동기화 실패')
+
+    def save_master(self):
+        self.db.save_plan(self.views[0].masterEdit.toPlainText())
+        self._run('마스터 기획에서 인물 자동 동기화 중...', self.sync_master_characters, self._after_master_saved)
+    def save_contract(self):
+        current=self.db.get_contract()
+        if current and current['locked']:
+            QMessageBox.warning(self,'핵심 기준 잠금','잠긴 핵심 기준은 수정할 수 없습니다.'); return
+        self.db.save_contract(self.views[0].contractEdit.toPlainText(),False); self.statusBar().showMessage('핵심 기준 저장 완료')
     def save_master_plot(self): self.db.set_meta('master_plot',self.views[0].masterPlotEdit.toPlainText()); self.statusBar().showMessage('전체 플롯 저장 완료')
     def generate_contract(self):
         if not self.db.get_plan(): return
@@ -440,7 +484,15 @@ class MainWindow(QMainWindow):
             return out
         self._run_stream('장편 핵심 기준 추출 중...', stream, lambda _: None,
                          append=self.views[0].contractEdit)
-    def lock_contract(self): self.db.save_contract(self.views[0].contractEdit.toPlainText(),True); self.statusBar().showMessage('핵심 기준 잠금 완료')
+    def lock_contract(self):
+        text=self.views[0].contractEdit.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self,'핵심 기준 필요','잠글 내용이 없습니다.')
+            return
+        self.db.save_contract(text,True)
+        self.views[0].contractEdit.setReadOnly(True)
+        self.views[0].lockBtn.setEnabled(False)
+        self.statusBar().showMessage('핵심 기준 잠금 완료')
     def generate_master_plot(self):
         if not self.db.get_contract(): QMessageBox.warning(self,'핵심 기준 필요','먼저 핵심 기준을 추출하세요.'); return
         c = self.db.get_contract()
@@ -478,13 +530,62 @@ class MainWindow(QMainWindow):
     def _plan_ranges(self,start,end):
         return [(s,min(e,end)) for s,e in self.plot.ranges() if not (e<start or s>end)]
     def _generate_plans_worker(self,start,end):
+        saved = 0
         for s,e in self._plan_ranges(start,end):
-            out=self.plot.generate_chapter_plans(s,e)
-            for n,title,body in parse_chapter_plans(out): self.db.save_chapter_plan(n,title,body,'초안')
-        return True
+            if self._current_job is not None and self._current_job.is_cancelled():
+                break
+            out = self.plot.generate_chapter_plans(s,e)
+            plans = parse_chapter_plans(out)
+            check = validate_chapter_plans(plans, s, e)
+
+            # 누락된 화만 1회 보완 생성하여 모델의 형식 흔들림을 흡수한다.
+            if not check['valid'] and check['missing']:
+                repair = self.ai.generate(repair_chapter_plans(out, s, e, check['missing']),
+                                          temperature=.30, max_tokens=9000)
+                plans.extend(parse_chapter_plans(repair))
+                # 중복은 최신 보완 결과를 우선한다.
+                merged = {}
+                for n,title,body in plans:
+                    if s <= n <= e:
+                        merged[n] = (n,title,body)
+                plans = [merged[n] for n in sorted(merged)]
+                check = validate_chapter_plans(plans, s, e)
+
+            if not check['valid']:
+                missing = ', '.join(f'{n}화' for n in check['missing']) or '없음'
+                extra = ', '.join(f'{n}화' for n in check['extra']) or '없음'
+                raise ValueError(
+                    f'{s}~{e}화 플롯을 완전히 파싱하지 못했습니다.\n'
+                    f'누락: {missing} / 범위 밖: {extra}\n\n'
+                    f'AI 원문 앞부분:\n{out[:1200]}'
+                )
+
+            for n,title,body in plans:
+                self.db.save_chapter_plan(n,title,body,'초안')
+                saved += 1
+        return saved
+
     def generate_chapter_plans(self):
-        s,e=self.views[3].start.value(),self.views[3].end.value(); self._run(f'{s}~{e}화 개별 플롯 생성 중...',lambda:self._generate_plans_worker(s,e),lambda _:self.views[3].refresh())
-    def generate_all_chapter_plans(self): self.views[3].start.setValue(1); self.views[3].end.setValue(int(self.pm.settings['target_chapters'])); self.generate_chapter_plans()
+        s,e=self.views[3].start.value(),self.views[3].end.value()
+        total=int(self.pm.settings.get('target_chapters',500) or 500)
+        if s < 1 or e < s or e > total:
+            QMessageBox.warning(self,'화 범위 오류',f'유효한 범위는 1~{total}화입니다.')
+            return
+        if not self.db.get_meta('master_plot','').strip():
+            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 AI 전체 플롯을 생성하거나 저장하세요.')
+            return
+        relevant = [r for r in self.db.sections() if not (r['end_chapter'] < s or r['start_chapter'] > e) and (r['content'] or '').strip()]
+        if not relevant:
+            QMessageBox.warning(self,'스토리 구간 필요',f'{s}~{e}화에 해당하는 스토리 구간이 없습니다.\n먼저 [스토리 구간]에서 해당 구간을 생성하세요.')
+            return
+        self._run(f'{s}~{e}화 개별 플롯 생성 중...',
+                  lambda:self._generate_plans_worker(s,e),
+                  lambda n:(self.views[3].refresh(), self.statusBar().showMessage(f'{n}개 화 플롯 저장 완료')))
+
+    def generate_all_chapter_plans(self):
+        self.views[3].start.setValue(1)
+        self.views[3].end.setValue(int(self.pm.settings['target_chapters']))
+        self.generate_chapter_plans()
     def improve_plot(self):
         p=self.views[3].selected();
         if not p:return
@@ -493,7 +594,7 @@ class MainWindow(QMainWindow):
         self.current=int(n); v=self.views[4]; v.editor.blockSignals(True); v.editor.setPlainText(self.pm.load_chapter(self.current)); v.editor.blockSignals(False); r=self.db.chapter(self.current); v.titleEdit.setText(r['title'] if r else f'{self.current}화'); self.update_count(); self._update_state();
         if hasattr(self,'chat_window'): self.chat_window.refresh(self.db.chat_messages())
     def update_count(self):
-        t=self.views[4].editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.views[4].countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자'); self.ui.findChild(QLabel,'countLabel').setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
+        t=self.views[4].editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.views[4].countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
     def save_current(self):
         v=self.views[4]; t=v.editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.pm.save_chapter(self.current,t); self.db.set_chapter_meta(self.current,v.titleEdit.text().strip() or f'{self.current}화','작성완료' if t.strip() else '미작성',n,ns,target); self._load_chapters(); self.statusBar().showMessage(f'{self.current}화 저장 완료')
     def save_all(self, silent=False):

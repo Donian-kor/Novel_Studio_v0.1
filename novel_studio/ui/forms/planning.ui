@@ -49,4 +49,3 @@
  <resources/>
  <connections/>
 </ui>
-ut" name="pHead"><item><widget class="QLabel" name="pLbl"><property name="text"><string>전체 플롯</string></property></widget></item><item><widget class="QPushButton" name="masterPlotBtn"><property name="text"><string>AI 전체 플롯 생성</string></property></widget></item><item><widget class="QPushButton" name="savePlotBtn"><property name="text"><string>전체 플롯 저장</string></property></widget></item></layout></item><item><widget class="QPlainTextEdit" name="masterPlotEdit"/></item></layout></widget><resources/><connections/></ui>

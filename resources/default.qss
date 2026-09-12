@@ -20,10 +20,18 @@ QPushButton {
     border-radius: 4px;
 }
 QPushButton:hover {
-    background: #575451;
+    background: #5C5955;
+    border-color: #7A7672;
+}
+QPushButton:focus {
+    border: 1px solid #8A7B63;
 }
 QPushButton:pressed {
-    background: #3A3836;
+    background: #262524;
+    color: #D8D6D3;
+    border-color: #3E3C3A;
+    padding-top: 7px;
+    padding-bottom: 5px;
 }
 QPushButton:disabled {
     background: #2E2D2C;

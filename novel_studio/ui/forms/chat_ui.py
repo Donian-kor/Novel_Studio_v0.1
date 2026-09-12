@@ -22,6 +22,7 @@ class Ui_AIChatWidget(object):
     def setupUi(self, AIChatWidget):
         if not AIChatWidget.objectName():
             AIChatWidget.setObjectName(u"AIChatWidget")
+        AIChatWidget.resize(436, 472)
         self.l = QVBoxLayout(AIChatWidget)
         self.l.setObjectName(u"l")
         self.contextLabel = QLabel(AIChatWidget)
@@ -37,6 +38,11 @@ class Ui_AIChatWidget(object):
 
         self.input = QPlainTextEdit(AIChatWidget)
         self.input.setObjectName(u"input")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.input.sizePolicy().hasHeightForWidth())
+        self.input.setSizePolicy(sizePolicy)
 
         self.l.addWidget(self.input)
 
@@ -65,7 +71,10 @@ class Ui_AIChatWidget(object):
         self.contextLabel.setText(QCoreApplication.translate("AIChatWidget", u"DB \uae30\ubc18 \uc791\ud488 \ube44\uc11c \u2014 \uc9c8\ubb38\ud558\uba74 \uc791\ud488 DB\ub97c \uac80\uc0c9\ud574\uc11c \ub2f5\ud569\ub2c8\ub2e4.", None))
         self.input.setPlaceholderText(QCoreApplication.translate("AIChatWidget", u"\uc608: \ud55c\uccad\uc758 \ud604\uc7ac \uacbd\uc9c0\uac00 \ubb50\uc57c? / 37\ud654 \uc694\uc57d\ud574\uc918. / 1\ud654 \uc368\uc918.", None))
         self.searchBtn.setText(QCoreApplication.translate("AIChatWidget", u"DB \uac80\uc0c9", None))
-        self.sendBtn.setText(QCoreApplication.translate("AIChatWidget", u"\uc804\uc1a1", None))
+        self.sendBtn.setText(QCoreApplication.translate("AIChatWidget", u"\uc804\uc1a1( Ctrl+Enter )", None))
+#if QT_CONFIG(shortcut)
+        self.sendBtn.setShortcut(QCoreApplication.translate("AIChatWidget", u"Ctrl+Return", None))
+#endif // QT_CONFIG(shortcut)
         pass
     # retranslateUi
 

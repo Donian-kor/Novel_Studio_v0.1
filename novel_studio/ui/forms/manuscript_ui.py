@@ -17,12 +17,13 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton,
-    QSizePolicy, QVBoxLayout, QWidget)
+    QSizePolicy, QSplitter, QVBoxLayout, QWidget)
 
 class Ui_ManuscriptPage(object):
     def setupUi(self, ManuscriptPage):
         if not ManuscriptPage.objectName():
             ManuscriptPage.setObjectName(u"ManuscriptPage")
+        ManuscriptPage.resize(905, 921)
         self.l = QVBoxLayout(ManuscriptPage)
         self.l.setObjectName(u"l")
         self.top = QHBoxLayout()
@@ -70,23 +71,26 @@ class Ui_ManuscriptPage(object):
 
         self.l.addLayout(self.top)
 
-        self.work = QHBoxLayout()
-        self.work.setObjectName(u"work")
-        self.chapterList = QListWidget(ManuscriptPage)
+        self.manuscriptSplitter = QSplitter(ManuscriptPage)
+        self.manuscriptSplitter.setObjectName(u"manuscriptSplitter")
+        self.manuscriptSplitter.setOrientation(Qt.Orientation.Horizontal)
+        self.chapterList = QListWidget(self.manuscriptSplitter)
         self.chapterList.setObjectName(u"chapterList")
-
-        self.work.addWidget(self.chapterList)
-
-        self.editor = QPlainTextEdit(ManuscriptPage)
+        self.manuscriptSplitter.addWidget(self.chapterList)
+        self.editor = QPlainTextEdit(self.manuscriptSplitter)
         self.editor.setObjectName(u"editor")
+        self.editor.setStyleSheet(u"")
+        self.manuscriptSplitter.addWidget(self.editor)
 
-        self.work.addWidget(self.editor)
-
-
-        self.l.addLayout(self.work)
+        self.l.addWidget(self.manuscriptSplitter)
 
         self.countLabel = QLabel(ManuscriptPage)
         self.countLabel.setObjectName(u"countLabel")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.countLabel.sizePolicy().hasHeightForWidth())
+        self.countLabel.setSizePolicy(sizePolicy)
 
         self.l.addWidget(self.countLabel)
 

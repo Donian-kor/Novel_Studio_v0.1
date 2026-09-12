@@ -29,6 +29,8 @@ class Ui_PlotsPage(object):
         self.top.setObjectName(u"top")
         self.start = QSpinBox(PlotsPage)
         self.start.setObjectName(u"start")
+        self.start.setMinimum(1)
+        self.start.setMaximum(5000)
         self.start.setValue(1)
 
         self.top.addWidget(self.start)
@@ -40,6 +42,8 @@ class Ui_PlotsPage(object):
 
         self.end = QSpinBox(PlotsPage)
         self.end.setObjectName(u"end")
+        self.end.setMinimum(1)
+        self.end.setMaximum(5000)
         self.end.setValue(5)
 
         self.top.addWidget(self.end)

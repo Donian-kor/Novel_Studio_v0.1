@@ -1,1 +1,66 @@
-<?xml version="1.0" encoding="UTF-8"?><ui version="4.0"><class>AIChatWidget</class><widget class="QWidget" name="AIChatWidget"><layout class="QVBoxLayout" name="l"><item><widget class="QLabel" name="contextLabel"><property name="text"><string>DB 기반 작품 비서 — 질문하면 작품 DB를 검색해서 답합니다.</string></property></widget></item><item><widget class="QPlainTextEdit" name="log"><property name="readOnly"><bool>true</bool></property></widget></item><item><widget class="QPlainTextEdit" name="input"><property name="placeholderText"><string>예: 한청의 현재 경지가 뭐야? / 37화 요약해줘. / 1화 써줘.</string></property></widget></item><item><layout class="QHBoxLayout" name="a"><item><widget class="QPushButton" name="searchBtn"><property name="text"><string>DB 검색</string></property></widget></item><item><widget class="QPushButton" name="sendBtn"><property name="text"><string>전송</string></property></widget></item></layout></item></layout></widget><resources/><connections/></ui>
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AIChatWidget</class>
+ <widget class="QWidget" name="AIChatWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>436</width>
+    <height>472</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="l">
+   <item>
+    <widget class="QLabel" name="contextLabel">
+     <property name="text">
+      <string>DB 기반 작품 비서 — 질문하면 작품 DB를 검색해서 답합니다.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="log">
+     <property name="readOnly">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPlainTextEdit" name="input">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="placeholderText">
+      <string>예: 한청의 현재 경지가 뭐야? / 37화 요약해줘. / 1화 써줘.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="a">
+     <item>
+      <widget class="QPushButton" name="searchBtn">
+       <property name="text">
+        <string>DB 검색</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="sendBtn">
+       <property name="text">
+        <string>전송( Ctrl+Enter )</string>
+       </property>
+       <property name="shortcut">
+        <string>Ctrl+Return</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

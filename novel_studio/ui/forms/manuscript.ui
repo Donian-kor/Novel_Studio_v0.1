@@ -2,29 +2,103 @@
 <ui version="4.0">
  <class>ManuscriptPage</class>
  <widget class="QWidget" name="ManuscriptPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>905</width>
+    <height>921</height>
+   </rect>
+  </property>
   <layout class="QVBoxLayout" name="l">
    <item>
     <layout class="QHBoxLayout" name="top">
-     <item><widget class="QLineEdit" name="titleEdit"><property name="placeholderText"><string>화 제목</string></property></widget></item>
-     <item><widget class="QPushButton" name="writeBtn"><property name="text"><string>AI 집필</string></property></widget></item>
-     <item><widget class="QPushButton" name="chatBtn"><property name="text"><string>AI 작품 비서</string></property></widget></item>
-     <item><widget class="QPushButton" name="reviseBtn"><property name="text"><string>AI 문장 다듬기</string></property></widget></item>
-     <item><widget class="QPushButton" name="checkBtn"><property name="text"><string>설정 충돌 검사</string></property></widget></item>
-     <item><widget class="QPushButton" name="spellBtn"><property name="text"><string>맞춤법 검사</string></property></widget></item>
-     <item><widget class="QPushButton" name="cleanBtn"><property name="text"><string>AI 기호 삭제</string></property></widget></item>
-     <item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item>
+     <item>
+      <widget class="QLineEdit" name="titleEdit">
+       <property name="placeholderText">
+        <string>화 제목</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="writeBtn">
+       <property name="text">
+        <string>AI 집필</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="chatBtn">
+       <property name="text">
+        <string>AI 작품 비서</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="reviseBtn">
+       <property name="text">
+        <string>AI 문장 다듬기</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="checkBtn">
+       <property name="text">
+        <string>설정 충돌 검사</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="spellBtn">
+       <property name="text">
+        <string>맞춤법 검사</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="cleanBtn">
+       <property name="text">
+        <string>AI 기호 삭제</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="saveBtn">
+       <property name="text">
+        <string>저장</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="work">
-     <item><widget class="QListWidget" name="chapterList"/></item>
-     <item><widget class="QPlainTextEdit" name="editor"/></item>
-    </layout>
+    <widget class="QSplitter" name="manuscriptSplitter">
+     <property name="orientation">
+      <enum>Qt::Orientation::Horizontal</enum>
+     </property>
+     <widget class="QListWidget" name="chapterList"/>
+     <widget class="QPlainTextEdit" name="editor">
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+     </widget>
+    </widget>
    </item>
-   <item><widget class="QLabel" name="countLabel"><property name="text"><string>현재 0자 / 목표 0자</string></property></widget></item>
+   <item>
+    <widget class="QLabel" name="countLabel">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>현재 0자 / 목표 0자</string>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <resources/>
  <connections/>
 </ui>
-

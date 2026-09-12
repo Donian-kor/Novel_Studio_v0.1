@@ -151,11 +151,6 @@ class Ui_MainWidget(object):
 
         self.bottom = QHBoxLayout()
         self.bottom.setObjectName(u"bottom")
-        self.countLabel = QLabel(MainWidget)
-        self.countLabel.setObjectName(u"countLabel")
-
-        self.bottom.addWidget(self.countLabel)
-
         self.bottomSpace = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         self.bottom.addItem(self.bottomSpace)
@@ -200,7 +195,6 @@ class Ui_MainWidget(object):
         self.rightExpand.setText(QCoreApplication.translate("MainWidget", u"\u25c0", None))
         self.rightCollapse.setText(QCoreApplication.translate("MainWidget", u"\uc624\ub978\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25b6", None))
         self.stateTitle.setText(QCoreApplication.translate("MainWidget", u"\ud604\uc7ac \uc791\ud488 \uc0c1\ud0dc", None))
-        self.countLabel.setText(QCoreApplication.translate("MainWidget", u"\ud604\uc7ac 0\uc790 / \ubaa9\ud45c 0\uc790", None))
         self.cleanAllBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uae30\ud638 \uc0ad\uc81c", None))
         self.saveAllBtn.setText(QCoreApplication.translate("MainWidget", u"\uc804\uccb4 \uc800\uc7a5", None))
         self.chatBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc791\ud488 \ube44\uc11c", None))
