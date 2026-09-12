@@ -1,36 +1,35 @@
-from __future__ import annotations
-from pathlib import Path
-from PySide6.QtWidgets import QDialog,QFormLayout,QLineEdit,QSpinBox,QPushButton,QHBoxLayout,QFileDialog,QComboBox,QVBoxLayout,QLabel
-
+from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from novel_studio.ui.loader import load_ui
 class NewProjectDialog(QDialog):
     def __init__(self,parent=None):
-        super().__init__(parent); self.setWindowTitle('새 작품'); self.setMinimumWidth(430)
-        f=QFormLayout(); self.folder=QLineEdit(str(Path.cwd()/'NovelProject')); b=QPushButton('찾기'); b.clicked.connect(self.browse); row=QHBoxLayout(); row.addWidget(self.folder); row.addWidget(b); f.addRow('프로젝트 폴더',row)
-        self.title=QLineEdit('새 소설'); self.genre=QLineEdit('선협'); self.total=QSpinBox(); self.total.setRange(1,5000); self.total.setValue(500); self.chars=QSpinBox(); self.chars.setRange(500,50000); self.chars.setValue(5000); self.tol=QSpinBox(); self.tol.setRange(0,5000); self.tol.setValue(300)
-        f.addRow('작품명',self.title); f.addRow('장르',self.genre); f.addRow('총 화수',self.total); f.addRow('화당 목표 글자 수',self.chars); f.addRow('허용 오차',self.tol)
-        ok=QPushButton('생성'); ok.clicked.connect(self.accept); f.addRow(ok); self.setLayout(f)
+        super().__init__(parent); self.form=load_ui('new_project.ui',self); self.setLayout(self.form.layout())
+        self.title=self.form.titleEdit; self.folder=self.form.folderEdit; self.genre=self.form.genreEdit; self.mood=self.form.moodEdit; self.total=self.form.totalSpin; self.chars=self.form.charsSpin; self.tol=self.form.tolSpin
+        self.form.browseButton.clicked.connect(self.browse); self.form.buttonBox.accepted.connect(self.validate_accept); self.form.buttonBox.rejected.connect(self.reject)
     def browse(self):
-        d=QFileDialog.getExistingDirectory(self,'프로젝트 폴더');
-        if d: self.folder.setText(d)
+        p=QFileDialog.getExistingDirectory(self,'프로젝트 저장 폴더');
+        if p:self.folder.setText(p)
+    def validate_accept(self):
+        if not self.title.text().strip() or not self.folder.text().strip(): QMessageBox.warning(self,'입력 필요','작품명과 저장 폴더를 입력하세요.'); return
+        self.accept()
 
 class AISettingsDialog(QDialog):
-    def __init__(self,settings,parent=None):
-        super().__init__(parent); self.setWindowTitle('AI 설정 - LM Studio'); self.setMinimumWidth(520)
-        f=QFormLayout(); self.url=QLineEdit(settings.get('lmstudio_url','http://localhost:1234')); self.model=QComboBox(); self.model.setEditable(True); self.model.addItem(settings.get('model',''))
-        refresh=QPushButton('모델 목록 새로고침'); test=QPushButton('연결 테스트'); r=QHBoxLayout(); r.addWidget(self.model); r.addWidget(refresh); r.addWidget(test); f.addRow('LM Studio 주소 / 모델',self.url); f.addRow('',r)
-        self.temp=QLineEdit(settings.get('temperature','0.72')); self.top_p=QLineEdit(settings.get('top_p','0.9')); self.max_tokens=QSpinBox(); self.max_tokens.setRange(256,50000); self.max_tokens.setValue(int(settings.get('max_tokens','7000')))
-        f.addRow('Temperature',self.temp); f.addRow('Top P',self.top_p); f.addRow('최대 출력 토큰',self.max_tokens)
-        self.status=QLabel('연결 테스트 전'); f.addRow('상태',self.status)
-        save=QPushButton('저장'); save.clicked.connect(self.accept); f.addRow(save); self.setLayout(f)
-        refresh.clicked.connect(self.refresh_models); test.clicked.connect(self.test_connection)
+    def __init__(self,project,parent=None):
+        super().__init__(parent); self.project=project; self.form=load_ui('ai_settings.ui',self); self.setLayout(self.form.layout())
+        s=project.settings
+        self.url=self.form.urlEdit; self.model=self.form.modelEdit; self.temp=self.form.tempSpin; self.top=self.form.topSpin; self.max_tokens=self.form.maxTokensSpin
+        self.font=self.form.fontEdit; self.font_size=self.form.fontSizeSpin; self.text_color=self.form.textColorEdit; self.bg_color=self.form.bgColorEdit; self.spacing=self.form.spacingSpin
+        self.url.setText(s.get('lmstudio_url','http://localhost:1234')); self.model.setText(s.get('model','')); self.temp.setValue(float(s.get('temperature','0.72'))); self.top.setValue(float(s.get('top_p','0.90'))); self.max_tokens.setValue(int(s.get('max_tokens','9000')))
+        self.font.setText(s.get('editor_font_family','Malgun Gothic')); self.font_size.setValue(int(s.get('editor_font_size','18'))); self.text_color.setText(s.get('editor_text_color','#222222')); self.bg_color.setText(s.get('editor_bg_color','#FFFDF5')); self.spacing.setValue(float(s.get('editor_line_spacing','1.4')))
+        self.form.refreshButton.clicked.connect(self.refresh_models); self.form.testButton.clicked.connect(self.test); self.form.modelsList.itemClicked.connect(lambda item: self.model.setText(item.text())); self.form.buttonBox.accepted.connect(self.save); self.form.buttonBox.rejected.connect(self.reject)
     def refresh_models(self):
         from novel_studio.ai.lmstudio import LMStudioClient
         try:
-            models=LMStudioClient(self.url.text().strip()).list_models(); self.model.clear(); [self.model.addItem(m.get('id','')) for m in models]; self.status.setText(f'{len(models)}개 모델');
-        except Exception as e: self.status.setText(f'실패: {e}')
-    def test_connection(self):
+            ms=LMStudioClient(self.url.text().strip()).list_models(); self.form.modelsList.clear(); self.form.modelsList.addItems([m.get('id','') for m in ms])
+        except Exception as e: QMessageBox.warning(self,'연결 실패',str(e))
+    def test(self):
+        from novel_studio.ai.lmstudio import LMStudioClient
         try:
-            from novel_studio.ai.lmstudio import LMStudioClient
-            models=LMStudioClient(self.url.text().strip(),self.model.currentText().strip()).list_models(); self.status.setText('연결됨: '+(models[0].get('id','') if models else '모델 없음'))
-        except Exception as e: self.status.setText(f'연결 실패: {e}')
-    def values(self): return {'lmstudio_url':self.url.text().strip(),'model':self.model.currentText().strip(),'temperature':self.temp.text().strip(),'top_p':self.top_p.text().strip(),'max_tokens':str(self.max_tokens.value())}
+            ms=LMStudioClient(self.url.text().strip(),self.model.text().strip()).list_models(); QMessageBox.information(self,'연결 성공',f'LM Studio 연결 성공\n모델 {len(ms)}개 확인')
+        except Exception as e: QMessageBox.critical(self,'연결 실패',str(e))
+    def save(self):
+        self.project.save_settings({'lmstudio_url':self.url.text().strip(),'model':self.model.text().strip(),'temperature':str(self.temp.value()),'top_p':str(self.top.value()),'max_tokens':str(self.max_tokens.value()),'editor_font_family':self.font.text().strip(),'editor_font_size':str(self.font_size.value()),'editor_text_color':self.text_color.text().strip(),'editor_bg_color':self.bg_color.text().strip(),'editor_line_spacing':str(self.spacing.value())}); self.accept()

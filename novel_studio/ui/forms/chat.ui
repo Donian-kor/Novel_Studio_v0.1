@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>QWidget</class>
+ <widget class="QWidget" name="ChatView">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
+<layout class="QVBoxLayout" name="root"><item><widget class="QLabel" name="pageTitle"><property name="text"><string>AI 채팅</string></property></widget></item><item><widget class="QPlainTextEdit" name="chatLog"><property name="readOnly"><bool>true</bool></property></widget></item><item><widget class="QPlainTextEdit" name="chatInput"><property name="readOnly"><bool>false</bool></property></widget></item><item><layout class="QHBoxLayout" name="buttons"><item><widget class="QPushButton" name="sendButton"><property name="text"><string>전송</string></property></widget></item><item><widget class="QPushButton" name="clearButton"><property name="text"><string>대화 지우기</string></property></widget></item></layout></item></layout>
+ </widget>
+ <resources/><connections/>
+</ui>
