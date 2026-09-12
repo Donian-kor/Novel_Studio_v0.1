@@ -1,31 +1,32 @@
-# Novel Studio v0.3
+# Novel Studio v0.4
 
-Python + PySide6 기반 로컬 AI 장편소설 집필 프로그램입니다.
+Python + PySide6 기반 장편 웹소설 집필 프로그램 프로토타입.
 
 ## 핵심
-- 원고는 `chapters/001.txt` 형식의 TXT 유지
-- SQLite `novel.db`에 작품 기억/설정 저장
-- LM Studio OpenAI 호환 API 사용
-- 짧은 아이디어 → Master Plan → Plan Contract → 5화 Chunk → 화별 플롯 → 본문 집필
-- Chunk Snapshot / Chapter Memory / 최근 4화 Sliding Memory
-- 인물 / 세계관 / 시간축 / 복선 관리
-- 연속성 검사
-- 중단 지점부터 청크 재개
-- 프로젝트 ZIP 백업
+- TXT 원고 저장
+- SQLite 프로젝트 관리
+- LM Studio(OpenAI 호환 API) 연결 설정 UI
+- 아이디어 1개 생성/재생성
+- AI 마스터 기획
+- 세계관/인물/세력/장소/수련체계/시간축/복선/핵심 사건별 AI 생성
+- Plan Contract
+- 스토리 구간(기본 5화) 단위 생성
+- 화별 개별 플롯
+- AI 채팅: 현재 화 컨텍스트 자동 포함
+- AI 1화 집필 / 윤문 / 연속성 검사
+- 실시간 원고 글자 수 표시
+
+## 구조
+`main.py`는 실행 진입점만 담당하고 기능별로 `core/db/ai/services/ui` 모듈을 분리했다.
 
 ## 실행
-Windows:
-`run_windows.bat`
+Windows에서 `run_windows.bat` 실행 또는:
 
-직접 실행:
-```bash
+```text
 python -m venv .venv
-.venv\Scripts\activate
+.venv\\Scripts\\activate
 pip install -r requirements.txt
 python main.py
 ```
 
-LM Studio에서 Local Server를 실행하고 기본 주소 `http://localhost:1234`를 사용합니다.
-
-## 기존 v0.2 프로젝트
-v0.3은 기존 `novel.db`를 열면 필요한 테이블을 `CREATE TABLE IF NOT EXISTS`로 보강합니다. 기존 원고/TXT/기존 플롯은 유지됩니다.
+LM Studio Local Server 기본 주소는 `http://localhost:1234`.
