@@ -5,8 +5,8 @@ import sys
 import subprocess
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QListWidget,
                                  QStackedWidget, QLabel, QPushButton, QFrame,
-                                 QPlainTextEdit, QDialog)
-from PySide6.QtCore import QThreadPool
+                                 QPlainTextEdit, QDialog, QComboBox)
+from PySide6.QtCore import QThreadPool, QTimer
 from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence
 from novel_studio.ui.loader import load_ui
 from novel_studio.ui.views.planning import PlanningView
@@ -74,6 +74,25 @@ class MainWindow(QMainWindow):
             self.stopBtn.clicked.connect(self._stop)
             self.stopBtn.setEnabled(False)
         self.ui.findChild(QPushButton,'leftCollapse').clicked.connect(lambda:self._set_left(False)); self.ui.findChild(QPushButton,'leftExpand').clicked.connect(lambda:self._set_left(True)); self.ui.findChild(QPushButton,'rightCollapse').clicked.connect(lambda:self._set_right(False)); self.ui.findChild(QPushButton,'rightExpand').clicked.connect(lambda:self._set_right(True)); self.ui.findChild(QPushButton,'settingsBtn').clicked.connect(self.open_settings); self.ui.findChild(QPushButton,'chatBtn').clicked.connect(self.open_ai_chat); self._set_left(True); self._set_right(True); self._build_top_dashboard()
+        sa = self.ui.findChild(QPushButton, 'saveAllBtn')
+        if sa is not None:
+            sa.clicked.connect(self.save_all)
+        ca = self.ui.findChild(QPushButton, 'cleanAllBtn')
+        if ca is not None:
+            ca.clicked.connect(self.clean_marks_all)
+        cbo = self.ui.findChild(QComboBox, 'autoSaveCombo')
+        if cbo is not None:
+            self.autoSaveCombo = cbo
+            for label, mins in (('자동 저장: 안 함', 0), ('자동 저장: 5분', 5), ('자동 저장: 10분', 10)):
+                cbo.addItem(label, mins)
+            try:
+                saved_min = int(self.app.data.get('editor', {}).get('auto_save_interval', 0) or 0)
+            except Exception:
+                saved_min = 0
+            idx = cbo.findData(saved_min)
+            cbo.setCurrentIndex(idx if idx >= 0 else 0)
+            cbo.currentIndexChanged.connect(self._on_auto_save_changed)
+            self._setup_auto_save(saved_min)
         p=self.views[0]; p.masterBtn.clicked.connect(self.generate_master); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
         s = self.views[1]
         # EntitiesView는 __init__ 내부에서 add/save/del/AI 버튼을 자체 배선함
@@ -162,6 +181,11 @@ class MainWindow(QMainWindow):
 
     def _restart_with(self, root):
         """프로젝트 전환: 새 프로세스로 재시작해 해당 프로젝트를 연다."""
+        # 전환 전 현재 내용을 저장해 데이터 유실을 막는다
+        try:
+            self.save_all(silent=True)
+        except Exception:
+            pass
         try:
             script = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'main.py'))
             subprocess.Popen([sys.executable, script, str(root)])
@@ -472,6 +496,154 @@ class MainWindow(QMainWindow):
         t=self.views[4].editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.views[4].countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자'); self.ui.findChild(QLabel,'countLabel').setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
     def save_current(self):
         v=self.views[4]; t=v.editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.pm.save_chapter(self.current,t); self.db.set_chapter_meta(self.current,v.titleEdit.text().strip() or f'{self.current}화','작성완료' if t.strip() else '미작성',n,ns,target); self._load_chapters(); self.statusBar().showMessage(f'{self.current}화 저장 완료')
+    def save_all(self, silent=False):
+        """모든 섹션의 현재 편집 내용을 DB/파일에 일괄 저장한다.
+
+        silent=True(자동 저장/창 닫기/프로젝트 전환)면 팝업 없이 상태 표시줄로만 알린다.
+        """
+        saved, failed = [], []
+        # 1) 기획 (아이디어/마스터 기획/핵심 기준/전체 플롯)
+        try:
+            p = self.views[0]
+            idea = p.ideaEdit.toPlainText().strip()
+            if idea:
+                self.db.set_meta('idea', idea)
+            if p.masterEdit.toPlainText().strip():
+                self.db.save_plan(p.masterEdit.toPlainText())
+            c = p.contractEdit.toPlainText()
+            if c.strip():
+                # 잠금 상태는 유지한다 (잠금 해제가 전체 저장으로 풀리지 않게)
+                prev = self.db.get_contract()
+                locked = bool(prev['locked']) if prev else False
+                self.db.save_contract(c, locked)
+            if p.masterPlotEdit.toPlainText().strip():
+                self.db.set_meta('master_plot', p.masterPlotEdit.toPlainText())
+            saved.append('기획')
+        except Exception as e:
+            failed.append('기획'); logger.warning('전체 저장(기획) 실패: %s', e)
+        # 2) 설정 DB (현재 선택/편집 중인 항목)
+        try:
+            if self.views[1].save_entry(quiet=True):
+                saved.append('설정 DB')
+        except Exception as e:
+            failed.append('설정 DB'); logger.warning('전체 저장(설정 DB) 실패: %s', e)
+        # 3) 스토리 구간 (현재 선택 구간 요약/스냅샷)
+        try:
+            if self.views[2].save_detail():
+                saved.append('스토리 구간')
+        except Exception as e:
+            failed.append('스토리 구간'); logger.warning('전체 저장(스토리 구간) 실패: %s', e)
+        # 4) 화별 플롯 (현재 선택 화 플롯)
+        try:
+            if self.views[3].save_detail():
+                saved.append('화별 플롯')
+        except Exception as e:
+            failed.append('화별 플롯'); logger.warning('전체 저장(화별 플롯) 실패: %s', e)
+        # 5) 원고 (현재 화)
+        try:
+            self.save_current()
+            saved.append('원고')
+        except Exception as e:
+            failed.append('원고'); logger.warning('전체 저장(원고) 실패: %s', e)
+        # 6) 기억/연속성 메모
+        try:
+            if self.views[5].save_detail():
+                saved.append('기억/연속성')
+        except Exception as e:
+            failed.append('기억/연속성'); logger.warning('전체 저장(기억/연속성) 실패: %s', e)
+        if failed:
+            if silent:
+                self.statusBar().showMessage('자동 저장 실패: ' + ', '.join(failed))
+            else:
+                QMessageBox.warning(self, '전체 저장',
+                                    '일부 저장에 실패했습니다.\n\n실패: ' + ', '.join(failed)
+                                    + '\n저장됨: ' + (', '.join(saved) or '없음'))
+        elif saved:
+            if silent:
+                self.statusBar().showMessage('자동 저장 완료: ' + ', '.join(saved))
+            else:
+                self.statusBar().showMessage('전체 저장 완료: ' + ', '.join(saved))
+                QMessageBox.information(self, '전체 저장',
+                                        '모든 내용을 저장했습니다.\n- ' + '\n- '.join(saved))
+        else:
+            self.statusBar().showMessage('저장할 내용이 없습니다.')
+
+    # ---------- 자동 저장 ----------
+    def _setup_auto_save(self, minutes):
+        """자동 저장 타이머를 minutes 간격(분)으로 설정. 0이면 끔."""
+        if not hasattr(self, 'auto_timer'):
+            self.auto_timer = QTimer(self)
+            self.auto_timer.timeout.connect(self._auto_save_tick)
+        self.auto_timer.stop()
+        if minutes and minutes > 0:
+            self.auto_timer.start(int(minutes) * 60 * 1000)
+
+    def _on_auto_save_changed(self, idx):
+        try:
+            mins = int(self.autoSaveCombo.itemData(idx) or 0)
+        except Exception:
+            mins = 0
+        try:
+            self.app.data.setdefault('editor', {})['auto_save_interval'] = mins
+            self.app.save()
+        except Exception as e:
+            logger.warning('자동 저장 설정 저장 실패: %s', e)
+        self._setup_auto_save(mins)
+        self.statusBar().showMessage(f'자동 저장: {mins}분 간격' if mins else '자동 저장: 끔')
+
+    def _auto_save_tick(self):
+        """타이머 만료: 모든 섹션을 조용히 저장한다."""
+        if self._busy:
+            self.statusBar().showMessage('AI 작업 실행 중 - 자동 저장을 건너뛰었습니다.')
+            return
+        try:
+            self.save_all(silent=True)
+        except Exception as e:
+            logger.warning('자동 저장 실패: %s', e)
+
+    # ---------- 전체 섹션 AI 기호 삭제 ----------
+    def clean_marks_all(self):
+        """모든 섹션의 편집 칸에서 AI 특유 기호(마크다운/장식)를 제거하고 저장한다."""
+        targets = [
+            ('기획-아이디어', self.views[0].ideaEdit),
+            ('기획-마스터', self.views[0].masterEdit),
+            ('기획-핵심 기준', self.views[0].contractEdit),
+            ('기획-전체 플롯', self.views[0].masterPlotEdit),
+            ('설정 DB', self.views[1].detail),
+            ('스토리 구간', self.views[2].detail),
+            ('화별 플롯', self.views[3].detail),
+            ('원고', self.views[4].editor),
+            ('기억/연속성', self.views[5].edit),
+        ]
+        changed = []
+        for name, w in targets:
+            try:
+                t = w.toPlainText()
+                out = strip_ai_marks(t)
+                if out != t:
+                    w.setPlainText(out)
+                    changed.append(name)
+            except Exception as e:
+                logger.warning('AI 기호 삭제(%s) 실패: %s', name, e)
+        if changed:
+            # 정리된 내용을 바로 저장해 유실을 막는다
+            self.save_all(silent=True)
+            msg = 'AI 특유 기호를 제거했습니다.\n- ' + '\n- '.join(changed)
+            self.statusBar().showMessage(f'AI 기호 삭제: {len(changed)}곳 정리 완료')
+        else:
+            msg = '제거할 기호가 없습니다.'
+            self.statusBar().showMessage('AI 기호 삭제: 제거할 기호 없음')
+        QMessageBox.information(self, 'AI 기호 삭제', msg)
+
+    def closeEvent(self, event):
+        """창 닫을 때 현재 내용을 자동 저장한다 (AI 작업 중이면 건너뜀)."""
+        try:
+            if not self._busy:
+                self.save_all(silent=True)
+        except Exception:
+            pass
+        super().closeEvent(event)
+
     def write_current(self):
         """요청 2·4: 기획 확인 후 실시간 스트리밍으로 집필한다."""
         if not self._check_write_prereq():

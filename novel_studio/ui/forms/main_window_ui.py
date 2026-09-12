@@ -15,10 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel,
-    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton,
-    QSizePolicy, QSpacerItem, QStackedWidget, QVBoxLayout,
-    QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout,
+    QLabel, QListWidget, QListWidgetItem, QPlainTextEdit,
+    QPushButton, QSizePolicy, QSpacerItem, QStackedWidget,
+    QVBoxLayout, QWidget)
 
 class Ui_MainWidget(object):
     def setupUi(self, MainWidget):
@@ -56,11 +56,6 @@ class Ui_MainWidget(object):
         self.stopBtn.setObjectName(u"stopBtn")
 
         self.top.addWidget(self.stopBtn)
-
-        self.chatBtn = QPushButton(MainWidget)
-        self.chatBtn.setObjectName(u"chatBtn")
-
-        self.top.addWidget(self.chatBtn)
 
 
         self.root.addLayout(self.top)
@@ -165,25 +160,25 @@ class Ui_MainWidget(object):
 
         self.bottom.addItem(self.bottomSpace)
 
-        self.saveBtn = QPushButton(MainWidget)
-        self.saveBtn.setObjectName(u"saveBtn")
+        self.autoSaveCombo = QComboBox(MainWidget)
+        self.autoSaveCombo.setObjectName(u"autoSaveCombo")
 
-        self.bottom.addWidget(self.saveBtn)
+        self.bottom.addWidget(self.autoSaveCombo)
 
-        self.writeBtn = QPushButton(MainWidget)
-        self.writeBtn.setObjectName(u"writeBtn")
+        self.cleanAllBtn = QPushButton(MainWidget)
+        self.cleanAllBtn.setObjectName(u"cleanAllBtn")
 
-        self.bottom.addWidget(self.writeBtn)
+        self.bottom.addWidget(self.cleanAllBtn)
 
-        self.reviseBtn = QPushButton(MainWidget)
-        self.reviseBtn.setObjectName(u"reviseBtn")
+        self.saveAllBtn = QPushButton(MainWidget)
+        self.saveAllBtn.setObjectName(u"saveAllBtn")
 
-        self.bottom.addWidget(self.reviseBtn)
+        self.bottom.addWidget(self.saveAllBtn)
 
-        self.checkBtn = QPushButton(MainWidget)
-        self.checkBtn.setObjectName(u"checkBtn")
+        self.chatBtn = QPushButton(MainWidget)
+        self.chatBtn.setObjectName(u"chatBtn")
 
-        self.bottom.addWidget(self.checkBtn)
+        self.bottom.addWidget(self.chatBtn)
 
 
         self.root.addLayout(self.bottom)
@@ -200,17 +195,15 @@ class Ui_MainWidget(object):
         self.aiStatus.setText(QCoreApplication.translate("MainWidget", u"AI \u25cf \ud655\uc778 \ud544\uc694", None))
         self.settingsBtn.setText(QCoreApplication.translate("MainWidget", u"\uc124\uc815", None))
         self.stopBtn.setText(QCoreApplication.translate("MainWidget", u"\u23f9 \uc815\uc9c0", None))
-        self.chatBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc791\ud488 \ube44\uc11c", None))
         self.leftCollapse.setText(QCoreApplication.translate("MainWidget", u"\uc67c\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25c0", None))
         self.leftExpand.setText(QCoreApplication.translate("MainWidget", u"\u25b6", None))
         self.rightExpand.setText(QCoreApplication.translate("MainWidget", u"\u25c0", None))
         self.rightCollapse.setText(QCoreApplication.translate("MainWidget", u"\uc624\ub978\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25b6", None))
         self.stateTitle.setText(QCoreApplication.translate("MainWidget", u"\ud604\uc7ac \uc791\ud488 \uc0c1\ud0dc", None))
         self.countLabel.setText(QCoreApplication.translate("MainWidget", u"\ud604\uc7ac 0\uc790 / \ubaa9\ud45c 0\uc790", None))
-        self.saveBtn.setText(QCoreApplication.translate("MainWidget", u"\uc800\uc7a5", None))
-        self.writeBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc9d1\ud544", None))
-        self.reviseBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc724\ubb38", None))
-        self.checkBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uac80\uc99d", None))
+        self.cleanAllBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uae30\ud638 \uc0ad\uc81c", None))
+        self.saveAllBtn.setText(QCoreApplication.translate("MainWidget", u"\uc804\uccb4 \uc800\uc7a5", None))
+        self.chatBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc791\ud488 \ube44\uc11c", None))
         pass
     # retranslateUi
 

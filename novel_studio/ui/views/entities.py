@@ -1,6 +1,9 @@
 from ._base import BaseView
 from PySide6.QtWidgets import (QComboBox, QListWidget, QPlainTextEdit, QPushButton,
                                QLineEdit, QInputDialog, QMessageBox)
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EntitiesView(BaseView):
@@ -168,11 +171,13 @@ class EntitiesView(BaseView):
             return
         self.refresh()
 
-    def save_entry(self):
+    def save_entry(self, quiet=False):
+        """현재 항목 저장. quiet=True면 완료/오류 팝업 없이 동작(전체 저장용)."""
         sel = self.selected()
         if not sel:
-            QMessageBox.information(self.w, '저장', '목록에서 항목을 먼저 선택하세요.')
-            return
+            if not quiet:
+                QMessageBox.information(self.w, '저장', '목록에서 항목을 먼저 선택하세요.')
+            return False
         kind, label, row = sel
         text = self.detail.toPlainText()
         name = self.nameEdit.text().strip() or label
@@ -195,10 +200,14 @@ class EntitiesView(BaseView):
                 db.execute("UPDATE timeline_events SET title=?, description=? WHERE id=?",
                            (name, text, row['id']))
         except Exception as e:
-            QMessageBox.critical(self.w, '저장 실패', str(e))
-            return
-        QMessageBox.information(self.w, '저장', '저장 완료')
+            logger.warning('설정 항목 저장 실패 (%s): %s', label, e)
+            if not quiet:
+                QMessageBox.critical(self.w, '저장 실패', str(e))
+            return False
+        if not quiet:
+            QMessageBox.information(self.w, '저장', '저장 완료')
         self.refresh()
+        return True
 
     # -- AI 생성/보완 --------------------------------------------------
     def ai_generate(self):

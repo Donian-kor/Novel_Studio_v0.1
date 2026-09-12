@@ -7,3 +7,9 @@ class PlotsView(BaseView):
         rows=self.w.db.chapter_plans(); i=self.list.currentRow(); return rows[i] if 0<=i<len(rows) else None
     def show_selected(self):
         p=self.selected(); self.detail.setPlainText(p['content'] if p else '')
+    def save_detail(self):
+        """편집된 화별 플롯을 DB에 저장. 저장했으면 True."""
+        p=self.selected()
+        if not p: return False
+        self.w.db.save_chapter_plan(p['chapter_number'],p['title'],self.detail.toPlainText(),p['status'] or '초안')
+        return True
