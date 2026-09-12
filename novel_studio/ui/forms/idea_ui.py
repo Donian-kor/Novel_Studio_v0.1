@@ -18,55 +18,53 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QPlainTextEdit,
     QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, IdeaView):
-        if not IdeaView.objectName():
-            IdeaView.setObjectName(u"IdeaView")
-        IdeaView.resize(1000, 700)
-        self.root = QVBoxLayout(IdeaView)
-        self.root.setObjectName(u"root")
-        self.pageTitle = QLabel(IdeaView)
-        self.pageTitle.setObjectName(u"pageTitle")
+class Ui_IdeaPage(object):
+    def setupUi(self, IdeaPage):
+        if not IdeaPage.objectName():
+            IdeaPage.setObjectName(u"IdeaPage")
+        self.l = QVBoxLayout(IdeaPage)
+        self.l.setObjectName(u"l")
+        self.title = QLabel(IdeaPage)
+        self.title.setObjectName(u"title")
 
-        self.root.addWidget(self.pageTitle)
+        self.l.addWidget(self.title)
 
-        self.ideaEdit = QPlainTextEdit(IdeaView)
+        self.hint = QLabel(IdeaPage)
+        self.hint.setObjectName(u"hint")
+
+        self.l.addWidget(self.hint)
+
+        self.ideaEdit = QPlainTextEdit(IdeaPage)
         self.ideaEdit.setObjectName(u"ideaEdit")
-        self.ideaEdit.setReadOnly(False)
 
-        self.root.addWidget(self.ideaEdit)
+        self.l.addWidget(self.ideaEdit)
 
-        self.buttons = QHBoxLayout()
-        self.buttons.setObjectName(u"buttons")
-        self.generateButton = QPushButton(IdeaView)
-        self.generateButton.setObjectName(u"generateButton")
+        self.a = QHBoxLayout()
+        self.a.setObjectName(u"a")
+        self.generateBtn = QPushButton(IdeaPage)
+        self.generateBtn.setObjectName(u"generateBtn")
 
-        self.buttons.addWidget(self.generateButton)
+        self.a.addWidget(self.generateBtn)
 
-        self.useButton = QPushButton(IdeaView)
-        self.useButton.setObjectName(u"useButton")
+        self.useBtn = QPushButton(IdeaPage)
+        self.useBtn.setObjectName(u"useBtn")
 
-        self.buttons.addWidget(self.useButton)
-
-
-        self.root.addLayout(self.buttons)
-
-        self.hintLabel = QLabel(IdeaView)
-        self.hintLabel.setObjectName(u"hintLabel")
-
-        self.root.addWidget(self.hintLabel)
+        self.a.addWidget(self.useBtn)
 
 
-        self.retranslateUi(IdeaView)
+        self.l.addLayout(self.a)
 
-        QMetaObject.connectSlotsByName(IdeaView)
+
+        self.retranslateUi(IdeaPage)
+
+        QMetaObject.connectSlotsByName(IdeaPage)
     # setupUi
 
-    def retranslateUi(self, IdeaView):
-        self.pageTitle.setText(QCoreApplication.translate("QWidget", u"\uc544\uc774\ub514\uc5b4", None))
-        self.generateButton.setText(QCoreApplication.translate("QWidget", u"AI \uc544\uc774\ub514\uc5b4 \uc0dd\uc131", None))
-        self.useButton.setText(QCoreApplication.translate("QWidget", u"\uc774 \uc544\uc774\ub514\uc5b4 \uc0ac\uc6a9", None))
-        self.hintLabel.setText(QCoreApplication.translate("QWidget", u"AI \uc544\uc774\ub514\uc5b4 \uc0dd\uc131\uc740 \ud55c \ubc88\uc5d0 1\uac1c \uc2dc\uc548\uc744 \ubcf4\uc5ec\uc8fc\uba70, \ub2e4\uc2dc \ub204\ub974\uba74 \uc0c8 \uc2dc\uc548\uc73c\ub85c \uad50\uccb4\ud569\ub2c8\ub2e4.", None))
+    def retranslateUi(self, IdeaPage):
+        self.title.setText(QCoreApplication.translate("IdeaPage", u"\uc544\uc774\ub514\uc5b4", None))
+        self.hint.setText(QCoreApplication.translate("IdeaPage", u"\uc544\uc774\ub514\uc5b4\uac00 \uc5c6\uc5b4\ub3c4 \ub429\ub2c8\ub2e4. AI \uc544\uc774\ub514\uc5b4 \uc0dd\uc131\uc740 \ud55c \ubc88\uc5d0 \ud558\ub098\uc758 \uc2dc\uc548\ub9cc \ubcf4\uc5ec\uc8fc\uba70 \ub2e4\uc2dc \ub204\ub974\uba74 \uc0c8 \uc2dc\uc548\uc73c\ub85c \uad50\uccb4\ud569\ub2c8\ub2e4.", None))
+        self.generateBtn.setText(QCoreApplication.translate("IdeaPage", u"AI \uc544\uc774\ub514\uc5b4 \uc0dd\uc131", None))
+        self.useBtn.setText(QCoreApplication.translate("IdeaPage", u"\uc774 \uc544\uc774\ub514\uc5b4 \uc0ac\uc6a9", None))
         pass
     # retranslateUi
 

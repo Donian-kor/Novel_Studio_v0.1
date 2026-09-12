@@ -19,87 +19,75 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QPlainTextEdit, QPushButton, QSizePolicy,
     QSpinBox, QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, PlotsView):
-        if not PlotsView.objectName():
-            PlotsView.setObjectName(u"PlotsView")
-        PlotsView.resize(1000, 700)
-        self.root = QVBoxLayout(PlotsView)
-        self.root.setObjectName(u"root")
-        self.pageTitle = QLabel(PlotsView)
-        self.pageTitle.setObjectName(u"pageTitle")
+class Ui_PlotsPage(object):
+    def setupUi(self, PlotsPage):
+        if not PlotsPage.objectName():
+            PlotsPage.setObjectName(u"PlotsPage")
+        self.l = QVBoxLayout(PlotsPage)
+        self.l.setObjectName(u"l")
+        self.top = QHBoxLayout()
+        self.top.setObjectName(u"top")
+        self.start = QSpinBox(PlotsPage)
+        self.start.setObjectName(u"start")
+        self.start.setValue(1)
 
-        self.root.addWidget(self.pageTitle)
+        self.top.addWidget(self.start)
 
-        self.controls = QHBoxLayout()
-        self.controls.setObjectName(u"controls")
-        self.startLabel = QLabel(PlotsView)
-        self.startLabel.setObjectName(u"startLabel")
+        self.dash = QLabel(PlotsPage)
+        self.dash.setObjectName(u"dash")
 
-        self.controls.addWidget(self.startLabel)
+        self.top.addWidget(self.dash)
 
-        self.startSpin = QSpinBox(PlotsView)
-        self.startSpin.setObjectName(u"startSpin")
-        self.startSpin.setMinimum(1)
-        self.startSpin.setMaximum(9999)
-        self.startSpin.setValue(1)
+        self.end = QSpinBox(PlotsPage)
+        self.end.setObjectName(u"end")
+        self.end.setValue(5)
 
-        self.controls.addWidget(self.startSpin)
+        self.top.addWidget(self.end)
 
-        self.endLabel = QLabel(PlotsView)
-        self.endLabel.setObjectName(u"endLabel")
+        self.generateBtn = QPushButton(PlotsPage)
+        self.generateBtn.setObjectName(u"generateBtn")
 
-        self.controls.addWidget(self.endLabel)
+        self.top.addWidget(self.generateBtn)
 
-        self.endSpin = QSpinBox(PlotsView)
-        self.endSpin.setObjectName(u"endSpin")
-        self.endSpin.setMinimum(1)
-        self.endSpin.setMaximum(9999)
-        self.endSpin.setValue(5)
+        self.allBtn = QPushButton(PlotsPage)
+        self.allBtn.setObjectName(u"allBtn")
 
-        self.controls.addWidget(self.endSpin)
+        self.top.addWidget(self.allBtn)
 
-        self.generateButton = QPushButton(PlotsView)
-        self.generateButton.setObjectName(u"generateButton")
+        self.improveBtn = QPushButton(PlotsPage)
+        self.improveBtn.setObjectName(u"improveBtn")
 
-        self.controls.addWidget(self.generateButton)
-
-        self.improveButton = QPushButton(PlotsView)
-        self.improveButton.setObjectName(u"improveButton")
-
-        self.controls.addWidget(self.improveButton)
+        self.top.addWidget(self.improveBtn)
 
 
-        self.root.addLayout(self.controls)
+        self.l.addLayout(self.top)
 
-        self.content = QHBoxLayout()
-        self.content.setObjectName(u"content")
-        self.plotList = QListWidget(PlotsView)
-        self.plotList.setObjectName(u"plotList")
+        self.body = QHBoxLayout()
+        self.body.setObjectName(u"body")
+        self.list = QListWidget(PlotsPage)
+        self.list.setObjectName(u"list")
 
-        self.content.addWidget(self.plotList)
+        self.body.addWidget(self.list)
 
-        self.plotDetail = QPlainTextEdit(PlotsView)
-        self.plotDetail.setObjectName(u"plotDetail")
-        self.plotDetail.setReadOnly(True)
+        self.detail = QPlainTextEdit(PlotsPage)
+        self.detail.setObjectName(u"detail")
 
-        self.content.addWidget(self.plotDetail)
-
-
-        self.root.addLayout(self.content)
+        self.body.addWidget(self.detail)
 
 
-        self.retranslateUi(PlotsView)
+        self.l.addLayout(self.body)
 
-        QMetaObject.connectSlotsByName(PlotsView)
+
+        self.retranslateUi(PlotsPage)
+
+        QMetaObject.connectSlotsByName(PlotsPage)
     # setupUi
 
-    def retranslateUi(self, PlotsView):
-        self.pageTitle.setText(QCoreApplication.translate("QWidget", u"\ud654\ubcc4 \uac1c\ubcc4 \ud50c\ub86f", None))
-        self.startLabel.setText(QCoreApplication.translate("QWidget", u"\uc2dc\uc791", None))
-        self.endLabel.setText(QCoreApplication.translate("QWidget", u"\ub05d", None))
-        self.generateButton.setText(QCoreApplication.translate("QWidget", u"AI \ud654\ubcc4 \ud50c\ub86f \uc0dd\uc131", None))
-        self.improveButton.setText(QCoreApplication.translate("QWidget", u"AI \ud50c\ub86f \uac1c\uc120", None))
+    def retranslateUi(self, PlotsPage):
+        self.dash.setText(QCoreApplication.translate("PlotsPage", u"~", None))
+        self.generateBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \ud654\ubcc4 \ud50c\ub86f \uc0dd\uc131", None))
+        self.allBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \uc804\uccb4 \ud654\ubcc4 \ud50c\ub86f \uc0dd\uc131", None))
+        self.improveBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \uc120\ud0dd \ud50c\ub86f \uac1c\uc120", None))
         pass
     # retranslateUi
 

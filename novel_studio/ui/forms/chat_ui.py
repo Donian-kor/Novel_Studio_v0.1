@@ -18,55 +18,54 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QPlainTextEdit,
     QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, ChatView):
-        if not ChatView.objectName():
-            ChatView.setObjectName(u"ChatView")
-        ChatView.resize(1000, 700)
-        self.root = QVBoxLayout(ChatView)
-        self.root.setObjectName(u"root")
-        self.pageTitle = QLabel(ChatView)
-        self.pageTitle.setObjectName(u"pageTitle")
+class Ui_AIChatWidget(object):
+    def setupUi(self, AIChatWidget):
+        if not AIChatWidget.objectName():
+            AIChatWidget.setObjectName(u"AIChatWidget")
+        self.l = QVBoxLayout(AIChatWidget)
+        self.l.setObjectName(u"l")
+        self.contextLabel = QLabel(AIChatWidget)
+        self.contextLabel.setObjectName(u"contextLabel")
 
-        self.root.addWidget(self.pageTitle)
+        self.l.addWidget(self.contextLabel)
 
-        self.chatLog = QPlainTextEdit(ChatView)
-        self.chatLog.setObjectName(u"chatLog")
-        self.chatLog.setReadOnly(True)
+        self.log = QPlainTextEdit(AIChatWidget)
+        self.log.setObjectName(u"log")
+        self.log.setReadOnly(True)
 
-        self.root.addWidget(self.chatLog)
+        self.l.addWidget(self.log)
 
-        self.chatInput = QPlainTextEdit(ChatView)
-        self.chatInput.setObjectName(u"chatInput")
-        self.chatInput.setReadOnly(False)
+        self.input = QPlainTextEdit(AIChatWidget)
+        self.input.setObjectName(u"input")
 
-        self.root.addWidget(self.chatInput)
+        self.l.addWidget(self.input)
 
-        self.buttons = QHBoxLayout()
-        self.buttons.setObjectName(u"buttons")
-        self.sendButton = QPushButton(ChatView)
-        self.sendButton.setObjectName(u"sendButton")
+        self.a = QHBoxLayout()
+        self.a.setObjectName(u"a")
+        self.searchBtn = QPushButton(AIChatWidget)
+        self.searchBtn.setObjectName(u"searchBtn")
 
-        self.buttons.addWidget(self.sendButton)
+        self.a.addWidget(self.searchBtn)
 
-        self.clearButton = QPushButton(ChatView)
-        self.clearButton.setObjectName(u"clearButton")
+        self.sendBtn = QPushButton(AIChatWidget)
+        self.sendBtn.setObjectName(u"sendBtn")
 
-        self.buttons.addWidget(self.clearButton)
+        self.a.addWidget(self.sendBtn)
 
 
-        self.root.addLayout(self.buttons)
+        self.l.addLayout(self.a)
 
 
-        self.retranslateUi(ChatView)
+        self.retranslateUi(AIChatWidget)
 
-        QMetaObject.connectSlotsByName(ChatView)
+        QMetaObject.connectSlotsByName(AIChatWidget)
     # setupUi
 
-    def retranslateUi(self, ChatView):
-        self.pageTitle.setText(QCoreApplication.translate("QWidget", u"AI \ucc44\ud305", None))
-        self.sendButton.setText(QCoreApplication.translate("QWidget", u"\uc804\uc1a1", None))
-        self.clearButton.setText(QCoreApplication.translate("QWidget", u"\ub300\ud654 \uc9c0\uc6b0\uae30", None))
+    def retranslateUi(self, AIChatWidget):
+        self.contextLabel.setText(QCoreApplication.translate("AIChatWidget", u"DB \uae30\ubc18 \uc791\ud488 \ube44\uc11c \u2014 \uc9c8\ubb38\ud558\uba74 \uc791\ud488 DB\ub97c \uac80\uc0c9\ud574\uc11c \ub2f5\ud569\ub2c8\ub2e4.", None))
+        self.input.setPlaceholderText(QCoreApplication.translate("AIChatWidget", u"\uc608: \ud55c\uccad\uc758 \ud604\uc7ac \uacbd\uc9c0\uac00 \ubb50\uc57c? / 37\ud654 \uc694\uc57d\ud574\uc918. / 1\ud654 \uc368\uc918.", None))
+        self.searchBtn.setText(QCoreApplication.translate("AIChatWidget", u"DB \uac80\uc0c9", None))
+        self.sendBtn.setText(QCoreApplication.translate("AIChatWidget", u"\uc804\uc1a1", None))
         pass
     # retranslateUi
 

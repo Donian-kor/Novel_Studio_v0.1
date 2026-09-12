@@ -1,9 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>QWidget</class>
- <widget class="QWidget" name="ManuscriptView">
-  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
-<layout class="QVBoxLayout" name="root"><item><layout class="QHBoxLayout" name="top"><item><widget class="QLabel" name="chapterLabel"><property name="text"><string>화</string></property></widget></item><item><widget class="QSpinBox" name="chapterSpin"><property name="minimum"><number>1</number></property><property name="maximum"><number>9999</number></property></widget></item><item><widget class="QLineEdit" name="titleEdit"/></item><item><widget class="QPushButton" name="chatButton"><property name="text"><string>AI 채팅</string></property></widget></item></layout></item><item><widget class="QPlainTextEdit" name="editor"><property name="readOnly"><bool>false</bool></property></widget></item><item><layout class="QHBoxLayout" name="bottom"><item><widget class="QLabel" name="countLabel"><property name="text"><string>0자</string></property></widget></item><item><spacer name="s"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QPushButton" name="saveButton"><property name="text"><string>저장</string></property></widget></item><item><widget class="QPushButton" name="writeButton"><property name="text"><string>AI 집필</string></property></widget></item><item><widget class="QPushButton" name="reviseButton"><property name="text"><string>AI 윤문</string></property></widget></item><item><widget class="QPushButton" name="checkButton"><property name="text"><string>AI 검증</string></property></widget></item></layout></item></layout>
+ <class>ManuscriptPage</class>
+ <widget class="QWidget" name="ManuscriptPage">
+  <layout class="QVBoxLayout" name="l">
+   <item>
+    <layout class="QHBoxLayout" name="top">
+     <item><widget class="QLineEdit" name="titleEdit"><property name="placeholderText"><string>화 제목</string></property></widget></item>
+     <item><widget class="QPushButton" name="writeBtn"><property name="text"><string>AI 집필</string></property></widget></item>
+     <item><widget class="QPushButton" name="chatBtn"><property name="text"><string>AI 작품 비서</string></property></widget></item>
+     <item><widget class="QPushButton" name="reviseBtn"><property name="text"><string>AI 문장 다듬기</string></property></widget></item>
+     <item><widget class="QPushButton" name="checkBtn"><property name="text"><string>설정 충돌 검사</string></property></widget></item>
+     <item><widget class="QPushButton" name="spellBtn"><property name="text"><string>맞춤법 검사</string></property></widget></item>
+     <item><widget class="QPushButton" name="cleanBtn"><property name="text"><string>AI 기호 삭제</string></property></widget></item>
+     <item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="work">
+     <item><widget class="QListWidget" name="chapterList"/></item>
+     <item><widget class="QPlainTextEdit" name="editor"/></item>
+    </layout>
+   </item>
+   <item><widget class="QLabel" name="countLabel"><property name="text"><string>현재 0자 / 목표 0자</string></property></widget></item>
+  </layout>
  </widget>
- <resources/><connections/>
+ <resources/>
+ <connections/>
 </ui>
+

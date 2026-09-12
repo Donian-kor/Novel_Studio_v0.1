@@ -17,75 +17,54 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QPlainTextEdit, QPushButton, QSizePolicy,
-    QSpinBox, QVBoxLayout, QWidget)
+    QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, RangesView):
-        if not RangesView.objectName():
-            RangesView.setObjectName(u"RangesView")
-        RangesView.resize(1000, 700)
-        self.root = QVBoxLayout(RangesView)
-        self.root.setObjectName(u"root")
-        self.pageTitle = QLabel(RangesView)
-        self.pageTitle.setObjectName(u"pageTitle")
+class Ui_RangesPage(object):
+    def setupUi(self, RangesPage):
+        if not RangesPage.objectName():
+            RangesPage.setObjectName(u"RangesPage")
+        self.l = QVBoxLayout(RangesPage)
+        self.l.setObjectName(u"l")
+        self.hint = QLabel(RangesPage)
+        self.hint.setObjectName(u"hint")
 
-        self.root.addWidget(self.pageTitle)
+        self.l.addWidget(self.hint)
 
-        self.controls = QHBoxLayout()
-        self.controls.setObjectName(u"controls")
-        self.sizeLabel = QLabel(RangesView)
-        self.sizeLabel.setObjectName(u"sizeLabel")
+        self.list = QListWidget(RangesPage)
+        self.list.setObjectName(u"list")
 
-        self.controls.addWidget(self.sizeLabel)
+        self.l.addWidget(self.list)
 
-        self.sizeSpin = QSpinBox(RangesView)
-        self.sizeSpin.setObjectName(u"sizeSpin")
-        self.sizeSpin.setMinimum(1)
-        self.sizeSpin.setMaximum(30)
-        self.sizeSpin.setValue(5)
+        self.a = QHBoxLayout()
+        self.a.setObjectName(u"a")
+        self.generateBtn = QPushButton(RangesPage)
+        self.generateBtn.setObjectName(u"generateBtn")
 
-        self.controls.addWidget(self.sizeSpin)
+        self.a.addWidget(self.generateBtn)
 
-        self.generateButton = QPushButton(RangesView)
-        self.generateButton.setObjectName(u"generateButton")
+        self.snapshotBtn = QPushButton(RangesPage)
+        self.snapshotBtn.setObjectName(u"snapshotBtn")
 
-        self.controls.addWidget(self.generateButton)
-
-        self.snapshotButton = QPushButton(RangesView)
-        self.snapshotButton.setObjectName(u"snapshotButton")
-
-        self.controls.addWidget(self.snapshotButton)
+        self.a.addWidget(self.snapshotBtn)
 
 
-        self.root.addLayout(self.controls)
+        self.l.addLayout(self.a)
 
-        self.content = QHBoxLayout()
-        self.content.setObjectName(u"content")
-        self.rangeList = QListWidget(RangesView)
-        self.rangeList.setObjectName(u"rangeList")
+        self.detail = QPlainTextEdit(RangesPage)
+        self.detail.setObjectName(u"detail")
 
-        self.content.addWidget(self.rangeList)
-
-        self.rangeDetail = QPlainTextEdit(RangesView)
-        self.rangeDetail.setObjectName(u"rangeDetail")
-        self.rangeDetail.setReadOnly(True)
-
-        self.content.addWidget(self.rangeDetail)
+        self.l.addWidget(self.detail)
 
 
-        self.root.addLayout(self.content)
+        self.retranslateUi(RangesPage)
 
-
-        self.retranslateUi(RangesView)
-
-        QMetaObject.connectSlotsByName(RangesView)
+        QMetaObject.connectSlotsByName(RangesPage)
     # setupUi
 
-    def retranslateUi(self, RangesView):
-        self.pageTitle.setText(QCoreApplication.translate("QWidget", u"\uc2a4\ud1a0\ub9ac \uad6c\uac04", None))
-        self.sizeLabel.setText(QCoreApplication.translate("QWidget", u"\uad6c\uac04 \ud06c\uae30", None))
-        self.generateButton.setText(QCoreApplication.translate("QWidget", u"AI \uc2a4\ud1a0\ub9ac \uad6c\uac04 \uc0dd\uc131", None))
-        self.snapshotButton.setText(QCoreApplication.translate("QWidget", u"\uc120\ud0dd \uad6c\uac04 \uc0c1\ud0dc \uc800\uc7a5", None))
+    def retranslateUi(self, RangesPage):
+        self.hint.setText(QCoreApplication.translate("RangesPage", u"\uc2a4\ud1a0\ub9ac \uad6c\uac04: \uae34 \uc7a5\ud3b8 \ud50c\ub86f\uc744 \uc791\uc740 \uc791\uc5c5 \uad6c\uac04\uc73c\ub85c \ub098\ub204\uc5b4 \uc21c\uc11c\ub300\ub85c \uc0dd\uc131\ud569\ub2c8\ub2e4.", None))
+        self.generateBtn.setText(QCoreApplication.translate("RangesPage", u"AI \uc804\uccb4 \uc2a4\ud1a0\ub9ac \uad6c\uac04 \uc0dd\uc131 / \uc774\uc5b4\ud558\uae30", None))
+        self.snapshotBtn.setText(QCoreApplication.translate("RangesPage", u"\uc120\ud0dd \uad6c\uac04 \uae30\uc5b5 \uac31\uc2e0", None))
         pass
     # retranslateUi
 

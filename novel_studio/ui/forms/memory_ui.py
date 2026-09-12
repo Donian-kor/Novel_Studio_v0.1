@@ -15,52 +15,33 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QPlainTextEdit,
-    QPushButton, QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QLabel, QPlainTextEdit, QSizePolicy,
+    QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, MemoryView):
-        if not MemoryView.objectName():
-            MemoryView.setObjectName(u"MemoryView")
-        MemoryView.resize(1000, 700)
-        self.root = QVBoxLayout(MemoryView)
-        self.root.setObjectName(u"root")
-        self.pageTitle = QLabel(MemoryView)
-        self.pageTitle.setObjectName(u"pageTitle")
+class Ui_MemoryPage(object):
+    def setupUi(self, MemoryPage):
+        if not MemoryPage.objectName():
+            MemoryPage.setObjectName(u"MemoryPage")
+        self.l = QVBoxLayout(MemoryPage)
+        self.l.setObjectName(u"l")
+        self.hint = QLabel(MemoryPage)
+        self.hint.setObjectName(u"hint")
 
-        self.root.addWidget(self.pageTitle)
+        self.l.addWidget(self.hint)
 
-        self.memoryEdit = QPlainTextEdit(MemoryView)
-        self.memoryEdit.setObjectName(u"memoryEdit")
-        self.memoryEdit.setReadOnly(True)
+        self.edit = QPlainTextEdit(MemoryPage)
+        self.edit.setObjectName(u"edit")
 
-        self.root.addWidget(self.memoryEdit)
-
-        self.buttons = QHBoxLayout()
-        self.buttons.setObjectName(u"buttons")
-        self.summarizeButton = QPushButton(MemoryView)
-        self.summarizeButton.setObjectName(u"summarizeButton")
-
-        self.buttons.addWidget(self.summarizeButton)
-
-        self.checkButton = QPushButton(MemoryView)
-        self.checkButton.setObjectName(u"checkButton")
-
-        self.buttons.addWidget(self.checkButton)
+        self.l.addWidget(self.edit)
 
 
-        self.root.addLayout(self.buttons)
+        self.retranslateUi(MemoryPage)
 
-
-        self.retranslateUi(MemoryView)
-
-        QMetaObject.connectSlotsByName(MemoryView)
+        QMetaObject.connectSlotsByName(MemoryPage)
     # setupUi
 
-    def retranslateUi(self, MemoryView):
-        self.pageTitle.setText(QCoreApplication.translate("QWidget", u"\uae30\uc5b5 / \uc5f0\uc18d\uc131", None))
-        self.summarizeButton.setText(QCoreApplication.translate("QWidget", u"AI \uae30\uc5b5 \uc0dd\uc131", None))
-        self.checkButton.setText(QCoreApplication.translate("QWidget", u"AI \uc5f0\uc18d\uc131 \uac80\uc99d", None))
+    def retranslateUi(self, MemoryPage):
+        self.hint.setText(QCoreApplication.translate("MemoryPage", u"\ud654\ubcc4 \uae30\uc5b5\uacfc \uc5f0\uc18d\uc131 \uac80\uc0ac \uacb0\uacfc", None))
         pass
     # retranslateUi
 

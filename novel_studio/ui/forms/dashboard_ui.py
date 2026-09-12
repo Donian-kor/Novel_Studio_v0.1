@@ -15,35 +15,39 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QLabel, QPlainTextEdit, QSizePolicy,
+from PySide6.QtWidgets import (QApplication, QLabel, QSizePolicy, QSpacerItem,
     QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, DashboardView):
-        if not DashboardView.objectName():
-            DashboardView.setObjectName(u"DashboardView")
-        DashboardView.resize(1000, 700)
-        self.root = QVBoxLayout(DashboardView)
-        self.root.setObjectName(u"root")
-        self.pageTitle = QLabel(DashboardView)
-        self.pageTitle.setObjectName(u"pageTitle")
+class Ui_DashboardPage(object):
+    def setupUi(self, DashboardPage):
+        if not DashboardPage.objectName():
+            DashboardPage.setObjectName(u"DashboardPage")
+        self.l = QVBoxLayout(DashboardPage)
+        self.l.setObjectName(u"l")
+        self.title = QLabel(DashboardPage)
+        self.title.setObjectName(u"title")
 
-        self.root.addWidget(self.pageTitle)
+        self.l.addWidget(self.title)
 
-        self.dashboardText = QPlainTextEdit(DashboardView)
-        self.dashboardText.setObjectName(u"dashboardText")
-        self.dashboardText.setReadOnly(True)
+        self.summaryLabel = QLabel(DashboardPage)
+        self.summaryLabel.setObjectName(u"summaryLabel")
+        self.summaryLabel.setWordWrap(True)
 
-        self.root.addWidget(self.dashboardText)
+        self.l.addWidget(self.summaryLabel)
+
+        self.spacer = QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+        self.l.addItem(self.spacer)
 
 
-        self.retranslateUi(DashboardView)
+        self.retranslateUi(DashboardPage)
 
-        QMetaObject.connectSlotsByName(DashboardView)
+        QMetaObject.connectSlotsByName(DashboardPage)
     # setupUi
 
-    def retranslateUi(self, DashboardView):
-        self.pageTitle.setText(QCoreApplication.translate("QWidget", u"\ub300\uc2dc\ubcf4\ub4dc", None))
+    def retranslateUi(self, DashboardPage):
+        self.title.setText(QCoreApplication.translate("DashboardPage", u"\ub300\uc2dc\ubcf4\ub4dc", None))
+        self.summaryLabel.setText(QCoreApplication.translate("DashboardPage", u"\uc791\ud488 \uc815\ubcf4\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...", None))
         pass
     # retranslateUi
 

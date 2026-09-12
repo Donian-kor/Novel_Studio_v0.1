@@ -1,5 +1,4 @@
-from .base import FormView
-class MemoryView(FormView):
-    FORM='memory.ui'
-    def __init__(self,cb,parent=None):
-        super().__init__(parent);f=self.form;self.edit=f.memoryEdit;f.summarizeButton.clicked.connect(cb['summary']);f.checkButton.clicked.connect(cb['check'])
+from ._base import BaseView
+from PySide6.QtWidgets import QPlainTextEdit
+class MemoryView(BaseView):
+    def __init__(self,w): super().__init__(w); self.mount('memory.ui'); self.w=w; self.edit=self.ui.findChild(QPlainTextEdit,'edit')

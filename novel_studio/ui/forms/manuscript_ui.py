@@ -16,97 +16,96 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QPushButton, QSizePolicy, QSpacerItem,
-    QSpinBox, QVBoxLayout, QWidget)
+    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton,
+    QSizePolicy, QVBoxLayout, QWidget)
 
-class Ui_QWidget(object):
-    def setupUi(self, ManuscriptView):
-        if not ManuscriptView.objectName():
-            ManuscriptView.setObjectName(u"ManuscriptView")
-        ManuscriptView.resize(1000, 700)
-        self.root = QVBoxLayout(ManuscriptView)
-        self.root.setObjectName(u"root")
+class Ui_ManuscriptPage(object):
+    def setupUi(self, ManuscriptPage):
+        if not ManuscriptPage.objectName():
+            ManuscriptPage.setObjectName(u"ManuscriptPage")
+        self.l = QVBoxLayout(ManuscriptPage)
+        self.l.setObjectName(u"l")
         self.top = QHBoxLayout()
         self.top.setObjectName(u"top")
-        self.chapterLabel = QLabel(ManuscriptView)
-        self.chapterLabel.setObjectName(u"chapterLabel")
-
-        self.top.addWidget(self.chapterLabel)
-
-        self.chapterSpin = QSpinBox(ManuscriptView)
-        self.chapterSpin.setObjectName(u"chapterSpin")
-        self.chapterSpin.setMinimum(1)
-        self.chapterSpin.setMaximum(9999)
-
-        self.top.addWidget(self.chapterSpin)
-
-        self.titleEdit = QLineEdit(ManuscriptView)
+        self.titleEdit = QLineEdit(ManuscriptPage)
         self.titleEdit.setObjectName(u"titleEdit")
 
         self.top.addWidget(self.titleEdit)
 
-        self.chatButton = QPushButton(ManuscriptView)
-        self.chatButton.setObjectName(u"chatButton")
+        self.writeBtn = QPushButton(ManuscriptPage)
+        self.writeBtn.setObjectName(u"writeBtn")
 
-        self.top.addWidget(self.chatButton)
+        self.top.addWidget(self.writeBtn)
+
+        self.chatBtn = QPushButton(ManuscriptPage)
+        self.chatBtn.setObjectName(u"chatBtn")
+
+        self.top.addWidget(self.chatBtn)
+
+        self.reviseBtn = QPushButton(ManuscriptPage)
+        self.reviseBtn.setObjectName(u"reviseBtn")
+
+        self.top.addWidget(self.reviseBtn)
+
+        self.checkBtn = QPushButton(ManuscriptPage)
+        self.checkBtn.setObjectName(u"checkBtn")
+
+        self.top.addWidget(self.checkBtn)
+
+        self.spellBtn = QPushButton(ManuscriptPage)
+        self.spellBtn.setObjectName(u"spellBtn")
+
+        self.top.addWidget(self.spellBtn)
+
+        self.cleanBtn = QPushButton(ManuscriptPage)
+        self.cleanBtn.setObjectName(u"cleanBtn")
+
+        self.top.addWidget(self.cleanBtn)
+
+        self.saveBtn = QPushButton(ManuscriptPage)
+        self.saveBtn.setObjectName(u"saveBtn")
+
+        self.top.addWidget(self.saveBtn)
 
 
-        self.root.addLayout(self.top)
+        self.l.addLayout(self.top)
 
-        self.editor = QPlainTextEdit(ManuscriptView)
+        self.work = QHBoxLayout()
+        self.work.setObjectName(u"work")
+        self.chapterList = QListWidget(ManuscriptPage)
+        self.chapterList.setObjectName(u"chapterList")
+
+        self.work.addWidget(self.chapterList)
+
+        self.editor = QPlainTextEdit(ManuscriptPage)
         self.editor.setObjectName(u"editor")
-        self.editor.setReadOnly(False)
 
-        self.root.addWidget(self.editor)
+        self.work.addWidget(self.editor)
 
-        self.bottom = QHBoxLayout()
-        self.bottom.setObjectName(u"bottom")
-        self.countLabel = QLabel(ManuscriptView)
+
+        self.l.addLayout(self.work)
+
+        self.countLabel = QLabel(ManuscriptPage)
         self.countLabel.setObjectName(u"countLabel")
 
-        self.bottom.addWidget(self.countLabel)
-
-        self.s = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-
-        self.bottom.addItem(self.s)
-
-        self.saveButton = QPushButton(ManuscriptView)
-        self.saveButton.setObjectName(u"saveButton")
-
-        self.bottom.addWidget(self.saveButton)
-
-        self.writeButton = QPushButton(ManuscriptView)
-        self.writeButton.setObjectName(u"writeButton")
-
-        self.bottom.addWidget(self.writeButton)
-
-        self.reviseButton = QPushButton(ManuscriptView)
-        self.reviseButton.setObjectName(u"reviseButton")
-
-        self.bottom.addWidget(self.reviseButton)
-
-        self.checkButton = QPushButton(ManuscriptView)
-        self.checkButton.setObjectName(u"checkButton")
-
-        self.bottom.addWidget(self.checkButton)
+        self.l.addWidget(self.countLabel)
 
 
-        self.root.addLayout(self.bottom)
+        self.retranslateUi(ManuscriptPage)
 
-
-        self.retranslateUi(ManuscriptView)
-
-        QMetaObject.connectSlotsByName(ManuscriptView)
+        QMetaObject.connectSlotsByName(ManuscriptPage)
     # setupUi
 
-    def retranslateUi(self, ManuscriptView):
-        self.chapterLabel.setText(QCoreApplication.translate("QWidget", u"\ud654", None))
-        self.chatButton.setText(QCoreApplication.translate("QWidget", u"AI \ucc44\ud305", None))
-        self.countLabel.setText(QCoreApplication.translate("QWidget", u"0\uc790", None))
-        self.saveButton.setText(QCoreApplication.translate("QWidget", u"\uc800\uc7a5", None))
-        self.writeButton.setText(QCoreApplication.translate("QWidget", u"AI \uc9d1\ud544", None))
-        self.reviseButton.setText(QCoreApplication.translate("QWidget", u"AI \uc724\ubb38", None))
-        self.checkButton.setText(QCoreApplication.translate("QWidget", u"AI \uac80\uc99d", None))
+    def retranslateUi(self, ManuscriptPage):
+        self.titleEdit.setPlaceholderText(QCoreApplication.translate("ManuscriptPage", u"\ud654 \uc81c\ubaa9", None))
+        self.writeBtn.setText(QCoreApplication.translate("ManuscriptPage", u"AI \uc9d1\ud544", None))
+        self.chatBtn.setText(QCoreApplication.translate("ManuscriptPage", u"AI \uc791\ud488 \ube44\uc11c", None))
+        self.reviseBtn.setText(QCoreApplication.translate("ManuscriptPage", u"AI \ubb38\uc7a5 \ub2e4\ub4ec\uae30", None))
+        self.checkBtn.setText(QCoreApplication.translate("ManuscriptPage", u"\uc124\uc815 \ucda9\ub3cc \uac80\uc0ac", None))
+        self.spellBtn.setText(QCoreApplication.translate("ManuscriptPage", u"\ub9de\ucda4\ubc95 \uac80\uc0ac", None))
+        self.cleanBtn.setText(QCoreApplication.translate("ManuscriptPage", u"AI \uae30\ud638 \uc0ad\uc81c", None))
+        self.saveBtn.setText(QCoreApplication.translate("ManuscriptPage", u"\uc800\uc7a5", None))
+        self.countLabel.setText(QCoreApplication.translate("ManuscriptPage", u"\ud604\uc7ac 0\uc790 / \ubaa9\ud45c 0\uc790", None))
         pass
     # retranslateUi
 

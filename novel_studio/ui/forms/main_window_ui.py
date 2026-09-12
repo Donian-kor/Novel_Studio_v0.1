@@ -11,103 +11,96 @@
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
     QMetaObject, QObject, QPoint, QRect,
     QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
-    QCursor, QFont, QFontDatabase, QGradient,
-    QIcon, QImage, QKeySequence, QLinearGradient,
-    QPainter, QPalette, QPixmap, QRadialGradient,
-    QTransform)
-from PySide6.QtWidgets import (QApplication, QFormLayout, QFrame, QHBoxLayout,
-    QLabel, QListWidget, QListWidgetItem, QMainWindow,
-    QMenu, QMenuBar, QPlainTextEdit, QPushButton,
-    QSizePolicy, QSpacerItem, QStackedWidget, QStatusBar,
-    QVBoxLayout, QWidget)
+from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
+    QFont, QFontDatabase, QGradient, QIcon,
+    QImage, QKeySequence, QLinearGradient, QPainter,
+    QPalette, QPixmap, QRadialGradient, QTransform)
+from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel,
+    QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton,
+    QSizePolicy, QSpacerItem, QStackedWidget, QVBoxLayout,
+    QWidget)
 
-class Ui_MainWindow(object):
-    def setupUi(self, MainWindow):
-        if not MainWindow.objectName():
-            MainWindow.setObjectName(u"MainWindow")
-        MainWindow.resize(1600, 980)
-        self.actionNew = QAction(MainWindow)
-        self.actionNew.setObjectName(u"actionNew")
-        self.actionOpen = QAction(MainWindow)
-        self.actionOpen.setObjectName(u"actionOpen")
-        self.actionBackup = QAction(MainWindow)
-        self.actionBackup.setObjectName(u"actionBackup")
-        self.actionAISettings = QAction(MainWindow)
-        self.actionAISettings.setObjectName(u"actionAISettings")
-        self.centralWidget = QWidget(MainWindow)
-        self.centralWidget.setObjectName(u"centralWidget")
-        self.root = QVBoxLayout(self.centralWidget)
+class Ui_MainWidget(object):
+    def setupUi(self, MainWidget):
+        if not MainWidget.objectName():
+            MainWidget.setObjectName(u"MainWidget")
+        self.root = QVBoxLayout(MainWidget)
         self.root.setObjectName(u"root")
         self.top = QHBoxLayout()
         self.top.setObjectName(u"top")
-        self.appLabel = QLabel(self.centralWidget)
-        self.appLabel.setObjectName(u"appLabel")
+        self.appTitle = QLabel(MainWidget)
+        self.appTitle.setObjectName(u"appTitle")
 
-        self.top.addWidget(self.appLabel)
+        self.top.addWidget(self.appTitle)
 
-        self.projectLabel = QLabel(self.centralWidget)
+        self.projectLabel = QLabel(MainWidget)
         self.projectLabel.setObjectName(u"projectLabel")
 
         self.top.addWidget(self.projectLabel)
 
-        self.topSpacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.topSpace = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.top.addItem(self.topSpacer)
+        self.top.addItem(self.topSpace)
 
-        self.aiStatusLabel = QLabel(self.centralWidget)
-        self.aiStatusLabel.setObjectName(u"aiStatusLabel")
+        self.aiStatus = QLabel(MainWidget)
+        self.aiStatus.setObjectName(u"aiStatus")
 
-        self.top.addWidget(self.aiStatusLabel)
+        self.top.addWidget(self.aiStatus)
 
-        self.aiSettingsButton = QPushButton(self.centralWidget)
-        self.aiSettingsButton.setObjectName(u"aiSettingsButton")
+        self.settingsBtn = QPushButton(MainWidget)
+        self.settingsBtn.setObjectName(u"settingsBtn")
 
-        self.top.addWidget(self.aiSettingsButton)
+        self.top.addWidget(self.settingsBtn)
+
+        self.stopBtn = QPushButton(MainWidget)
+        self.stopBtn.setObjectName(u"stopBtn")
+
+        self.top.addWidget(self.stopBtn)
+
+        self.chatBtn = QPushButton(MainWidget)
+        self.chatBtn.setObjectName(u"chatBtn")
+
+        self.top.addWidget(self.chatBtn)
 
 
         self.root.addLayout(self.top)
 
         self.body = QHBoxLayout()
         self.body.setObjectName(u"body")
-        self.leftPanel = QFrame(self.centralWidget)
+        self.leftPanel = QFrame(MainWidget)
         self.leftPanel.setObjectName(u"leftPanel")
         self.leftPanel.setMinimumSize(QSize(220, 0))
-        self.leftPanel.setMaximumSize(QSize(380, 16777215))
+        self.leftPanel.setMaximumSize(QSize(360, 16777215))
         self.leftLayout = QVBoxLayout(self.leftPanel)
         self.leftLayout.setObjectName(u"leftLayout")
-        self.leftCollapseButton = QPushButton(self.leftPanel)
-        self.leftCollapseButton.setObjectName(u"leftCollapseButton")
+        self.leftCollapse = QPushButton(self.leftPanel)
+        self.leftCollapse.setObjectName(u"leftCollapse")
 
-        self.leftLayout.addWidget(self.leftCollapseButton)
+        self.leftLayout.addWidget(self.leftCollapse)
 
-        self.navigationList = QListWidget(self.leftPanel)
-        self.navigationList.setObjectName(u"navigationList")
+        self.navList = QListWidget(self.leftPanel)
+        self.navList.setObjectName(u"navList")
 
-        self.leftLayout.addWidget(self.navigationList)
+        self.leftLayout.addWidget(self.navList)
 
 
         self.body.addWidget(self.leftPanel)
 
-        self.leftHandle = QFrame(self.centralWidget)
+        self.leftHandle = QFrame(MainWidget)
         self.leftHandle.setObjectName(u"leftHandle")
-        self.leftHandle.setMinimumSize(QSize(28, 0))
-        self.leftHandle.setMaximumSize(QSize(28, 16777215))
-        self.leftHandleLayout = QVBoxLayout(self.leftHandle)
-        self.leftHandleLayout.setObjectName(u"leftHandleLayout")
-        self.leftExpandButton = QPushButton(self.leftHandle)
-        self.leftExpandButton.setObjectName(u"leftExpandButton")
+        self.leftHandle.setMinimumSize(QSize(26, 0))
+        self.leftHandle.setMaximumSize(QSize(26, 16777215))
+        self.lh = QVBoxLayout(self.leftHandle)
+        self.lh.setObjectName(u"lh")
+        self.leftExpand = QPushButton(self.leftHandle)
+        self.leftExpand.setObjectName(u"leftExpand")
 
-        self.leftHandleLayout.addWidget(self.leftExpandButton)
-
-        self.leftHandleSpacer = QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-
-        self.leftHandleLayout.addItem(self.leftHandleSpacer)
+        self.lh.addWidget(self.leftExpand)
 
 
         self.body.addWidget(self.leftHandle)
 
-        self.centerPanel = QFrame(self.centralWidget)
+        self.centerPanel = QFrame(MainWidget)
         self.centerPanel.setObjectName(u"centerPanel")
         self.centerLayout = QVBoxLayout(self.centerPanel)
         self.centerLayout.setObjectName(u"centerLayout")
@@ -119,100 +112,41 @@ class Ui_MainWindow(object):
 
         self.body.addWidget(self.centerPanel)
 
-        self.rightHandle = QFrame(self.centralWidget)
+        self.rightHandle = QFrame(MainWidget)
         self.rightHandle.setObjectName(u"rightHandle")
-        self.rightHandle.setMinimumSize(QSize(28, 0))
-        self.rightHandle.setMaximumSize(QSize(28, 16777215))
-        self.rightHandleLayout = QVBoxLayout(self.rightHandle)
-        self.rightHandleLayout.setObjectName(u"rightHandleLayout")
-        self.rightExpandButton = QPushButton(self.rightHandle)
-        self.rightExpandButton.setObjectName(u"rightExpandButton")
+        self.rightHandle.setMinimumSize(QSize(26, 0))
+        self.rightHandle.setMaximumSize(QSize(26, 16777215))
+        self.rh = QVBoxLayout(self.rightHandle)
+        self.rh.setObjectName(u"rh")
+        self.rightExpand = QPushButton(self.rightHandle)
+        self.rightExpand.setObjectName(u"rightExpand")
 
-        self.rightHandleLayout.addWidget(self.rightExpandButton)
-
-        self.rightHandleSpacer = QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-
-        self.rightHandleLayout.addItem(self.rightHandleSpacer)
+        self.rh.addWidget(self.rightExpand)
 
 
         self.body.addWidget(self.rightHandle)
 
-        self.rightPanel = QFrame(self.centralWidget)
+        self.rightPanel = QFrame(MainWidget)
         self.rightPanel.setObjectName(u"rightPanel")
-        self.rightPanel.setMinimumSize(QSize(280, 0))
+        self.rightPanel.setMinimumSize(QSize(290, 0))
         self.rightPanel.setMaximumSize(QSize(460, 16777215))
         self.rightLayout = QVBoxLayout(self.rightPanel)
         self.rightLayout.setObjectName(u"rightLayout")
-        self.rightCollapseButton = QPushButton(self.rightPanel)
-        self.rightCollapseButton.setObjectName(u"rightCollapseButton")
+        self.rightCollapse = QPushButton(self.rightPanel)
+        self.rightCollapse.setObjectName(u"rightCollapse")
 
-        self.rightLayout.addWidget(self.rightCollapseButton)
+        self.rightLayout.addWidget(self.rightCollapse)
 
         self.stateTitle = QLabel(self.rightPanel)
         self.stateTitle.setObjectName(u"stateTitle")
 
         self.rightLayout.addWidget(self.stateTitle)
 
-        self.stateForm = QFormLayout()
-        self.stateForm.setObjectName(u"stateForm")
-        self.stateChapterLabel = QLabel(self.rightPanel)
-        self.stateChapterLabel.setObjectName(u"stateChapterLabel")
+        self.stateText = QPlainTextEdit(self.rightPanel)
+        self.stateText.setObjectName(u"stateText")
+        self.stateText.setReadOnly(True)
 
-        self.stateForm.setWidget(0, QFormLayout.ItemRole.LabelRole, self.stateChapterLabel)
-
-        self.stateChapterValue = QLabel(self.rightPanel)
-        self.stateChapterValue.setObjectName(u"stateChapterValue")
-
-        self.stateForm.setWidget(0, QFormLayout.ItemRole.FieldRole, self.stateChapterValue)
-
-        self.stateTimeLabel = QLabel(self.rightPanel)
-        self.stateTimeLabel.setObjectName(u"stateTimeLabel")
-
-        self.stateForm.setWidget(1, QFormLayout.ItemRole.LabelRole, self.stateTimeLabel)
-
-        self.stateTimeValue = QLabel(self.rightPanel)
-        self.stateTimeValue.setObjectName(u"stateTimeValue")
-
-        self.stateForm.setWidget(1, QFormLayout.ItemRole.FieldRole, self.stateTimeValue)
-
-        self.stateLocationLabel = QLabel(self.rightPanel)
-        self.stateLocationLabel.setObjectName(u"stateLocationLabel")
-
-        self.stateForm.setWidget(2, QFormLayout.ItemRole.LabelRole, self.stateLocationLabel)
-
-        self.stateLocationValue = QLabel(self.rightPanel)
-        self.stateLocationValue.setObjectName(u"stateLocationValue")
-
-        self.stateForm.setWidget(2, QFormLayout.ItemRole.FieldRole, self.stateLocationValue)
-
-        self.stateProtagonistLabel = QLabel(self.rightPanel)
-        self.stateProtagonistLabel.setObjectName(u"stateProtagonistLabel")
-
-        self.stateForm.setWidget(3, QFormLayout.ItemRole.LabelRole, self.stateProtagonistLabel)
-
-        self.stateProtagonistValue = QLabel(self.rightPanel)
-        self.stateProtagonistValue.setObjectName(u"stateProtagonistValue")
-
-        self.stateForm.setWidget(3, QFormLayout.ItemRole.FieldRole, self.stateProtagonistValue)
-
-        self.stateCultivationLabel = QLabel(self.rightPanel)
-        self.stateCultivationLabel.setObjectName(u"stateCultivationLabel")
-
-        self.stateForm.setWidget(4, QFormLayout.ItemRole.LabelRole, self.stateCultivationLabel)
-
-        self.stateCultivationValue = QLabel(self.rightPanel)
-        self.stateCultivationValue.setObjectName(u"stateCultivationValue")
-
-        self.stateForm.setWidget(4, QFormLayout.ItemRole.FieldRole, self.stateCultivationValue)
-
-
-        self.rightLayout.addLayout(self.stateForm)
-
-        self.memoryPanel = QPlainTextEdit(self.rightPanel)
-        self.memoryPanel.setObjectName(u"memoryPanel")
-        self.memoryPanel.setReadOnly(True)
-
-        self.rightLayout.addWidget(self.memoryPanel)
+        self.rightLayout.addWidget(self.stateText)
 
 
         self.body.addWidget(self.rightPanel)
@@ -222,91 +156,61 @@ class Ui_MainWindow(object):
 
         self.bottom = QHBoxLayout()
         self.bottom.setObjectName(u"bottom")
-        self.charCountLabel = QLabel(self.centralWidget)
-        self.charCountLabel.setObjectName(u"charCountLabel")
+        self.countLabel = QLabel(MainWidget)
+        self.countLabel.setObjectName(u"countLabel")
 
-        self.bottom.addWidget(self.charCountLabel)
+        self.bottom.addWidget(self.countLabel)
 
-        self.bottomSpacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.bottomSpace = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        self.bottom.addItem(self.bottomSpacer)
+        self.bottom.addItem(self.bottomSpace)
 
-        self.saveButton = QPushButton(self.centralWidget)
-        self.saveButton.setObjectName(u"saveButton")
+        self.saveBtn = QPushButton(MainWidget)
+        self.saveBtn.setObjectName(u"saveBtn")
 
-        self.bottom.addWidget(self.saveButton)
+        self.bottom.addWidget(self.saveBtn)
 
-        self.writeButton = QPushButton(self.centralWidget)
-        self.writeButton.setObjectName(u"writeButton")
+        self.writeBtn = QPushButton(MainWidget)
+        self.writeBtn.setObjectName(u"writeBtn")
 
-        self.bottom.addWidget(self.writeButton)
+        self.bottom.addWidget(self.writeBtn)
 
-        self.reviseButton = QPushButton(self.centralWidget)
-        self.reviseButton.setObjectName(u"reviseButton")
+        self.reviseBtn = QPushButton(MainWidget)
+        self.reviseBtn.setObjectName(u"reviseBtn")
 
-        self.bottom.addWidget(self.reviseButton)
+        self.bottom.addWidget(self.reviseBtn)
 
-        self.checkButton = QPushButton(self.centralWidget)
-        self.checkButton.setObjectName(u"checkButton")
+        self.checkBtn = QPushButton(MainWidget)
+        self.checkBtn.setObjectName(u"checkBtn")
 
-        self.bottom.addWidget(self.checkButton)
+        self.bottom.addWidget(self.checkBtn)
 
 
         self.root.addLayout(self.bottom)
 
-        MainWindow.setCentralWidget(self.centralWidget)
-        self.menuBar = QMenuBar(MainWindow)
-        self.menuBar.setObjectName(u"menuBar")
-        self.menuProject = QMenu(self.menuBar)
-        self.menuProject.setObjectName(u"menuProject")
-        self.menuSettings = QMenu(self.menuBar)
-        self.menuSettings.setObjectName(u"menuSettings")
-        MainWindow.setMenuBar(self.menuBar)
-        self.statusBar = QStatusBar(MainWindow)
-        self.statusBar.setObjectName(u"statusBar")
-        MainWindow.setStatusBar(self.statusBar)
 
-        self.menuProject.addAction(self.actionNew)
-        self.menuProject.addAction(self.actionOpen)
-        self.menuProject.addAction(self.actionBackup)
-        self.menuSettings.addAction(self.actionAISettings)
+        self.retranslateUi(MainWidget)
 
-        self.retranslateUi(MainWindow)
-
-        QMetaObject.connectSlotsByName(MainWindow)
+        QMetaObject.connectSlotsByName(MainWidget)
     # setupUi
 
-    def retranslateUi(self, MainWindow):
-        self.actionNew.setText(QCoreApplication.translate("MainWindow", u"\uc0c8 \uc791\ud488", None))
-        self.actionOpen.setText(QCoreApplication.translate("MainWindow", u"\uc791\ud488 \uc5f4\uae30", None))
-        self.actionBackup.setText(QCoreApplication.translate("MainWindow", u"\ud504\ub85c\uc81d\ud2b8 \ubc31\uc5c5", None))
-        self.actionAISettings.setText(QCoreApplication.translate("MainWindow", u"AI / \ud3b8\uc9d1\uae30 \uc124\uc815", None))
-        self.appLabel.setText(QCoreApplication.translate("MainWindow", u"Novel Studio", None))
-        self.projectLabel.setText(QCoreApplication.translate("MainWindow", u"\ud504\ub85c\uc81d\ud2b8 \uc5c6\uc74c", None))
-        self.aiStatusLabel.setText(QCoreApplication.translate("MainWindow", u"AI \u25cf \ubbf8\uc5f0\uacb0", None))
-        self.aiSettingsButton.setText(QCoreApplication.translate("MainWindow", u"AI / \ud3b8\uc9d1\uae30 \uc124\uc815", None))
-        self.leftCollapseButton.setText(QCoreApplication.translate("MainWindow", u"\uc67c\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25c0", None))
-        self.leftExpandButton.setText(QCoreApplication.translate("MainWindow", u"\u25b6", None))
-        self.rightExpandButton.setText(QCoreApplication.translate("MainWindow", u"\u25c0", None))
-        self.rightCollapseButton.setText(QCoreApplication.translate("MainWindow", u"\uc624\ub978\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25b6", None))
-        self.stateTitle.setText(QCoreApplication.translate("MainWindow", u"\ud604\uc7ac \uc791\ud488 \uc0c1\ud0dc", None))
-        self.stateChapterLabel.setText(QCoreApplication.translate("MainWindow", u"\ud654", None))
-        self.stateChapterValue.setText(QCoreApplication.translate("MainWindow", u"-", None))
-        self.stateTimeLabel.setText(QCoreApplication.translate("MainWindow", u"\uc2dc\uac04", None))
-        self.stateTimeValue.setText(QCoreApplication.translate("MainWindow", u"-", None))
-        self.stateLocationLabel.setText(QCoreApplication.translate("MainWindow", u"\uc7a5\uc18c", None))
-        self.stateLocationValue.setText(QCoreApplication.translate("MainWindow", u"-", None))
-        self.stateProtagonistLabel.setText(QCoreApplication.translate("MainWindow", u"\uc8fc\uc778\uacf5", None))
-        self.stateProtagonistValue.setText(QCoreApplication.translate("MainWindow", u"-", None))
-        self.stateCultivationLabel.setText(QCoreApplication.translate("MainWindow", u"\uacbd\uc9c0", None))
-        self.stateCultivationValue.setText(QCoreApplication.translate("MainWindow", u"-", None))
-        self.charCountLabel.setText(QCoreApplication.translate("MainWindow", u"\ud604\uc7ac 0\uc790 / \ubaa9\ud45c 0\uc790", None))
-        self.saveButton.setText(QCoreApplication.translate("MainWindow", u"\uc800\uc7a5", None))
-        self.writeButton.setText(QCoreApplication.translate("MainWindow", u"AI \uc9d1\ud544", None))
-        self.reviseButton.setText(QCoreApplication.translate("MainWindow", u"AI \uc724\ubb38", None))
-        self.checkButton.setText(QCoreApplication.translate("MainWindow", u"AI \uac80\uc99d", None))
-        self.menuProject.setTitle(QCoreApplication.translate("MainWindow", u"\ud504\ub85c\uc81d\ud2b8", None))
-        self.menuSettings.setTitle(QCoreApplication.translate("MainWindow", u"\uc124\uc815", None))
+    def retranslateUi(self, MainWidget):
+        self.appTitle.setText(QCoreApplication.translate("MainWidget", u"Novel Studio", None))
+        self.projectLabel.setText(QCoreApplication.translate("MainWidget", u"\uc791\ud488", None))
+        self.aiStatus.setText(QCoreApplication.translate("MainWidget", u"AI \u25cf \ud655\uc778 \ud544\uc694", None))
+        self.settingsBtn.setText(QCoreApplication.translate("MainWidget", u"\uc124\uc815", None))
+        self.stopBtn.setText(QCoreApplication.translate("MainWidget", u"\u23f9 \uc815\uc9c0", None))
+        self.chatBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc791\ud488 \ube44\uc11c", None))
+        self.leftCollapse.setText(QCoreApplication.translate("MainWidget", u"\uc67c\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25c0", None))
+        self.leftExpand.setText(QCoreApplication.translate("MainWidget", u"\u25b6", None))
+        self.rightExpand.setText(QCoreApplication.translate("MainWidget", u"\u25c0", None))
+        self.rightCollapse.setText(QCoreApplication.translate("MainWidget", u"\uc624\ub978\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25b6", None))
+        self.stateTitle.setText(QCoreApplication.translate("MainWidget", u"\ud604\uc7ac \uc791\ud488 \uc0c1\ud0dc", None))
+        self.countLabel.setText(QCoreApplication.translate("MainWidget", u"\ud604\uc7ac 0\uc790 / \ubaa9\ud45c 0\uc790", None))
+        self.saveBtn.setText(QCoreApplication.translate("MainWidget", u"\uc800\uc7a5", None))
+        self.writeBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc9d1\ud544", None))
+        self.reviseBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uc724\ubb38", None))
+        self.checkBtn.setText(QCoreApplication.translate("MainWidget", u"AI \uac80\uc99d", None))
         pass
     # retranslateUi
 

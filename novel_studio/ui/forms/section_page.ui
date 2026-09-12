@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0">
- <class>QWidget</class>
- <widget class="QWidget" name="SectionPage">
-  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
-<layout class="QVBoxLayout" name="root"><item><widget class="QLabel" name="sectionTitle"><property name="text"><string>영역</string></property></widget></item><item><widget class="QPlainTextEdit" name="contentEdit"><property name="readOnly"><bool>false</bool></property></widget></item><item><layout class="QHBoxLayout" name="buttons"><item><widget class="QPushButton" name="generateButton"><property name="text"><string>AI 생성</string></property></widget></item><item><widget class="QPushButton" name="improveButton"><property name="text"><string>AI 개선</string></property></widget></item><item><widget class="QPushButton" name="loadButton"><property name="text"><string>DB 불러오기</string></property></widget></item></layout></item></layout>
- </widget>
- <resources/><connections/>
-</ui>

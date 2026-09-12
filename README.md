@@ -1,91 +1,25 @@
-# Novel Studio v1.1
+# Novel Studio Final v1.0
 
-Python + PySide6 + SQLite + TXT + LM Studio 기반 장편 웹소설 제작 프로그램입니다.
+장편 웹소설용 Python + PySide6 + Qt Designer + SQLite + TXT 기반 프로그램.
 
-## 핵심 사용 흐름
+## 시작 흐름
+프로그램 실행 → **새 프로젝트 만들기 / 기존 프로젝트 불러오기 / AI·편집기 설정**.
 
-1. 새 작품을 만들 때 총 화수와 화당 목표 글자 수를 입력합니다.
-2. 아이디어가 없으면 `AI 아이디어 생성`을 누릅니다. 한 번에 시안 1개만 보여주며, 다시 누르면 새 시안으로 교체합니다.
-3. 아이디어가 정해지면 `AI 마스터 기획`을 실행합니다.
-4. `AI 전체 설정 자동 생성`으로 세계관/수련체계/세력/장소/인물/시간축/복선/핵심 사건을 순서대로 생성할 수 있습니다.
-5. `AI Contract 추출`로 장편 동안 유지해야 할 핵심 불변 규칙을 만들고 승인합니다.
-6. `AI 전체 플롯 생성`으로 목표 화수의 큰 줄기를 만듭니다.
-7. `스토리 구간`은 긴 플롯을 작은 작업 단위로 나누는 기능입니다. 기본 5화이며 1~30화 범위에서 변경할 수 있습니다.
-8. `AI 화별 플롯 생성`으로 각 화를 고정된 형식의 개별 플롯으로 생성합니다.
-9. 원고 화면에서 `AI 집필` 또는 `AI 채팅`에 `1화 써줘`라고 입력하면 현재 화 플롯과 설정/기억/직전 원고가 자동 조합됩니다.
-10. 원고는 순수 TXT 파일로 저장되며, 글자 수는 실시간으로 표시됩니다.
-11. `AI 기억 생성`으로 화별 요약/상태를 만들고 `AI 연속성 검증`으로 설정 충돌을 검사할 수 있습니다.
+## 제작 흐름
+아이디어(직접 입력 또는 AI 1개 시안 생성/교체) → AI 마스터 기획 → 세계관/수련체계/세력/장소/인물/시간축/복선/핵심 사건 AI 생성·개선 → 핵심 기준(Plan Contract) → 전체 플롯 → 5화 기본 스토리 구간 생성 → 화별 플롯 → AI 작품 비서에서 `1화 써줘` → 목표 글자 수 보정 → 원고 확인/저장 → 기억·상태·연속성 갱신.
 
-## 프로젝트 데이터 구조
+## 데이터
+- 원고: `chapters/001.txt` 등 TXT
+- 구조화 정보: `novel.db` SQLite
+- 프로젝트 설정: `project.json`
 
-- `novel.db`: SQLite. 작품, 화, 플롯, 세계관, 인물, 인물 상태, 관계, 시간축, 복선, 사건, 기억, AI 작업 등을 저장합니다.
-- `chapters/*.txt`: 실제 확정 원고입니다.
-- `backups/`: 프로젝트 백업입니다.
-- `exports/`: 향후 내보내기용입니다.
-
-원고 본문은 DB에 저장하지 않고 TXT를 기준 원본으로 유지합니다.
+## AI Provider
+LM Studio / OpenAI / Anthropic / Google Gemini / OpenAI Compatible.
+API Key는 keyring을 사용해 OS 보안 저장소에 저장하도록 설계.
 
 ## UI 유지보수
+화면 레이아웃은 `novel_studio/ui/forms/*.ui`에 분리. Qt Designer에서 직접 수정 가능.
 
-화면은 Python에 하드코딩하지 않습니다. `novel_studio/ui/forms/*.ui` 파일이 Qt Designer 원본입니다.
-
-Qt Designer에서 `.ui`를 수정하고 저장하면 Python 로직 변경 없이 화면 레이아웃, 버튼, 라벨, 사이드바 배치 등을 편집할 수 있습니다.
-
-좌우 사이드바는 자동 접히지 않으며 사용자가 직접 접고 펼칠 수 있습니다.
-
-## 원고 편집기 설정
-
-`AI / 편집기 설정`에서 다음을 변경할 수 있습니다.
-
-- 글꼴
-- 글자 크기
-- 글자 색
-- 배경 색
-- 줄 간격
-- LM Studio 주소
-- 모델 ID
-- Temperature
-- Top P
-- 최대 출력 토큰
-
-기본 글자 수는 공백/줄바꿈을 제외한 문자 수이며, 상세 화면에는 공백 포함 문자 수도 표시됩니다.
-
-## LM Studio 연결
-
-LM Studio에서 Local Server를 시작한 뒤 기본값 `http://localhost:1234`를 사용합니다.
-
-프로그램 상단 `AI / 편집기 설정` → `모델 새로고침` → 모델 선택 → `연결 테스트` 순서로 설정할 수 있습니다.
-
-## 설치 / 실행 (Windows)
-
-### 간편 실행
-
-`run_windows.bat` 실행
-
-### 수동 실행
-
-```text
-python -m venv .venv
-.venv\\Scripts\\activate
-pip install -r requirements.txt
-python main.py
-```
-
-## 소스 구조
-
-```text
-novel_studio/
-├─ ai/                 LM Studio, 프롬프트, 컨텍스트
-├─ core/               프로젝트/공통 유틸
-├─ db/                 SQLite
-├─ planning/           마스터 기획
-├─ plot/               전체 플롯/스토리 구간/화별 플롯
-├─ manuscript/         원고 집필
-├─ memory/             요약/상태 스냅샷
-├─ continuity/         연속성 검사
-├─ services/           업무 서비스
-├─ jobs/               백그라운드 AI 작업
-└─ ui/
-   ├─ forms/           Qt Designer .ui
-   └─ views/           UI와 서비스 연결 코드
-```
+## 실행
+Windows: `run_windows.bat`
+수동: `py -3 -m venv .venv` → `.venv\Scripts\activate` → `pip install -r requirements.txt` → `python main.py`

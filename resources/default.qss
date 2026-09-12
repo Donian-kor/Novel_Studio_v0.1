@@ -1,6 +1,50 @@
-QMainWindow { background: #f4f5f7; }
-QFrame { background: transparent; }
-QPushButton { padding: 7px 12px; }
-QListWidget, QPlainTextEdit, QLineEdit { border: 1px solid #c9ccd2; border-radius: 4px; }
-QListWidget { background: #ffffff; }
-QLabel { color: #222222; }
+QMainWindow, QDialog {
+    background: #363534;
+    color: #E8E6E3;
+}
+QLabel, QGroupBox, QCheckBox, QRadioButton {
+    color: #E8E6E3;
+    background: transparent;
+}
+QGroupBox {
+    border: 1px solid #555250;
+    border-radius: 4px;
+    margin-top: 12px;
+    padding-top: 8px;
+}
+QPushButton {
+    padding: 6px 10px;
+    background: #4A4845;
+    color: #F5F3F0;
+    border: 1px solid #5E5B57;
+    border-radius: 4px;
+}
+QPushButton:hover {
+    background: #575451;
+}
+QPushButton:pressed {
+    background: #3A3836;
+}
+QPushButton:disabled {
+    background: #2E2D2C;
+    color: #7A7773;
+    border: 1px solid #444240;
+}
+QLineEdit, QPlainTextEdit, QListWidget, QComboBox, QSpinBox {
+    border: 1px solid #5E5B57;
+    border-radius: 4px;
+    padding: 3px;
+    background: #2B2B2B;
+    color: #E8E6E3;
+    selection-background-color: #6B5B4A;
+}
+QListWidget::item:selected, QComboBox QAbstractItemView::item:selected {
+    background: #6B5B4A;
+    color: #FFFFFF;
+}
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #2B2B2B;
+}
+QFrame {
+    background: transparent;
+}

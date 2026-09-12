@@ -1,9 +1,1 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0">
- <class>QWidget</class>
- <widget class="QWidget" name="IdeaView">
-  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
-<layout class="QVBoxLayout" name="root"><item><widget class="QLabel" name="pageTitle"><property name="text"><string>아이디어</string></property></widget></item><item><widget class="QPlainTextEdit" name="ideaEdit"><property name="readOnly"><bool>false</bool></property></widget></item><item><layout class="QHBoxLayout" name="buttons"><item><widget class="QPushButton" name="generateButton"><property name="text"><string>AI 아이디어 생성</string></property></widget></item><item><widget class="QPushButton" name="useButton"><property name="text"><string>이 아이디어 사용</string></property></widget></item></layout></item><item><widget class="QLabel" name="hintLabel"><property name="text"><string>AI 아이디어 생성은 한 번에 1개 시안을 보여주며, 다시 누르면 새 시안으로 교체합니다.</string></property></widget></item></layout>
- </widget>
- <resources/><connections/>
-</ui>
+<?xml version="1.0" encoding="UTF-8"?><ui version="4.0"><class>IdeaPage</class><widget class="QWidget" name="IdeaPage"><layout class="QVBoxLayout" name="l"><item><widget class="QLabel" name="title"><property name="text"><string>아이디어</string></property></widget></item><item><widget class="QLabel" name="hint"><property name="text"><string>아이디어가 없어도 됩니다. AI 아이디어 생성은 한 번에 하나의 시안만 보여주며 다시 누르면 새 시안으로 교체합니다.</string></property></widget></item><item><widget class="QPlainTextEdit" name="ideaEdit"/></item><item><layout class="QHBoxLayout" name="a"><item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI 아이디어 생성</string></property></widget></item><item><widget class="QPushButton" name="useBtn"><property name="text"><string>이 아이디어 사용</string></property></widget></item></layout></item></layout></widget><resources/><connections/></ui>

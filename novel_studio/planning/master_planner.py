@@ -1,16 +1,19 @@
-from __future__ import annotations
-from novel_studio.ai.prompts import master_prompt, section_prompt, contract_prompt
-
-SECTIONS=["세계관","수련체계","세력","장소","인물","시간축","복선","핵심 사건"]
-
+from novel_studio.ai.prompts import master, section, contract, SECTIONS
 class MasterPlanner:
     def __init__(self,db,ai,project): self.db,self.ai,self.project=db,ai,project
-    def create_master(self,idea):
-        r=self.ai.generate(master_prompt(idea,self.project.settings),temperature=.72,max_tokens=9000)
-        self.db.set_meta("idea",idea); self.db.set_meta("master_plan",r); return r
-    def generate_section(self,section,master,related=""):
-        r=self.ai.generate(section_prompt(section,master,related,self.project.settings.get("target_chapters","500")),temperature=.68,max_tokens=8000)
-        self.db.set_meta("section_"+section,r); return r
-    def extract_contract(self,master,sections):
-        r=self.ai.generate(contract_prompt(master,sections,int(self.project.settings.get("target_chapters","500"))),temperature=.22,max_tokens=5000)
-        self.db.save_contract(r,False); return r
+    def create_master(self,idea_text):
+        out=self.ai.generate([{'role':'system','content':'장편 웹소설 마스터 기획자'},{'role':'user','content':master(idea_text,self.project.settings)}],temperature=.72,max_tokens=12000)
+        self.db.save_plan(out); self.db.set_meta('idea',idea_text); return out
+    def generate_section(self,name):
+        out=self.ai.generate(section(name,self.db.get_plan(),self.project.settings['target_chapters'],self.db.section_content(name)),temperature=.68,max_tokens=9000)
+        self.db.save_section_content(name,out,'초안'); return out
+    def generate_all_sections(self,progress=None):
+        results={}
+        for name in SECTIONS:
+            results[name]=self.generate_section(name)
+            if progress: progress(name)
+        return results
+    def extract_contract(self):
+        txt='\n\n'.join(f'[{s}]\n{self.db.section_content(s)}' for s in SECTIONS)
+        out=self.ai.generate(contract(self.db.get_plan(),txt,self.project.settings['target_chapters']),temperature=.22,max_tokens=6000)
+        self.db.save_contract(out,False); return out

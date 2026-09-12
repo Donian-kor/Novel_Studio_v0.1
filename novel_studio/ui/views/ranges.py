@@ -1,5 +1,9 @@
-from .base import FormView
-class RangesView(FormView):
-    FORM='ranges.ui'
-    def __init__(self,cb,parent=None):
-        super().__init__(parent);f=self.form;self.size=f.sizeSpin;self.list=f.rangeList;self.detail=f.rangeDetail;f.generateButton.clicked.connect(cb['generate']);f.snapshotButton.clicked.connect(cb['snapshot']);f.rangeList.currentRowChanged.connect(cb['select'])
+from ._base import BaseView
+from PySide6.QtWidgets import QListWidget,QPlainTextEdit,QPushButton
+class RangesView(BaseView):
+    def __init__(self,w): super().__init__(w); self.mount('ranges.ui'); self.w=w; self.list=self.ui.findChild(QListWidget,'list'); self.detail=self.ui.findChild(QPlainTextEdit,'detail'); self.generateBtn=self.ui.findChild(QPushButton,'generateBtn'); self.snapshotBtn=self.ui.findChild(QPushButton,'snapshotBtn'); self.list.currentRowChanged.connect(self.show_selected)
+    def refresh(self): self.list.clear(); [self.list.addItem(f"스토리 구간 {r['start_chapter']:03d}~{r['end_chapter']:03d}화 | {r['status']}") for r in self.w.db.sections()]
+    def selected(self):
+        rows=self.w.db.sections(); i=self.list.currentRow(); return rows[i] if 0<=i<len(rows) else None
+    def show_selected(self):
+        r=self.selected(); self.detail.setPlainText((r['content'] if r else '')+'\n\n[상태 스냅샷]\n'+(r['snapshot'] if r else ''))

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>EntitiesPage</class>
+ <widget class="QWidget" name="EntitiesPage">
+  <layout class="QHBoxLayout" name="l">
+   <item>
+    <layout class="QVBoxLayout" name="left">
+     <item><widget class="QLabel" name="catLbl"><property name="text"><string>분류</string></property></widget></item>
+     <item><widget class="QComboBox" name="catCombo"/></item>
+     <item><widget class="QListWidget" name="entryList"/></item>
+     <item>
+      <layout class="QHBoxLayout" name="addRow">
+       <item><widget class="QPushButton" name="addBtn"><property name="text"><string>+ 추가</string></property></widget></item>
+       <item><widget class="QPushButton" name="delBtn"><property name="text"><string>삭제</string></property></widget></item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QVBoxLayout" name="right">
+     <item>
+      <layout class="QHBoxLayout" name="head">
+       <item><widget class="QLabel" name="nameLbl"><property name="text"><string>이름/코드</string></property></widget></item>
+       <item><widget class="QLineEdit" name="nameEdit"/></item>
+       <item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI로 생성/보완</string></property></widget></item>
+       <item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item>
+      </layout>
+     </item>
+     <item><widget class="QPlainTextEdit" name="detail"/></item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

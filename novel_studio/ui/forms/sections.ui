@@ -1,9 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>QWidget</class>
- <widget class="QWidget" name="SectionsView">
-  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
-<layout class="QVBoxLayout" name="root"><item><widget class="QLabel" name="pageTitle"><property name="text"><string>설정 자동 생성</string></property></widget></item><item><widget class="QLabel" name="hintLabel"><property name="text"><string>마스터 기획에서 초안을 가져온 뒤 각 영역을 AI로 생성·확장·개선할 수 있습니다.</string></property></widget></item><item><widget class="QTabWidget" name="sectionTabs"/></item></layout>
+ <class>SectionsPage</class>
+ <widget class="QWidget" name="SectionsPage">
+  <layout class="QVBoxLayout" name="l">
+   <item>
+    <widget class="QLabel" name="hint">
+     <property name="text">
+      <string>인물·세력·장소·복선·핵심 사건·시간축을 여러 항목으로 관리합니다. 필요한 만큼 추가하세요.</string>
+     </property>
+    </widget>
+   </item>
+   <item><widget class="QComboBox" name="catCombo"/></item>
+   <item>
+    <layout class="QHBoxLayout" name="buttons">
+     <item><widget class="QPushButton" name="addBtn"><property name="text"><string>+ 추가</string></property></widget></item>
+     <item><widget class="QPushButton" name="aiBtn"><property name="text"><string>AI로 추가</string></property></widget></item>
+     <item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item>
+     <item><widget class="QPushButton" name="delBtn"><property name="text"><string>삭제</string></property></widget></item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="work">
+     <item><widget class="QListWidget" name="list"/></item>
+     <item><widget class="QPlainTextEdit" name="detail"/></item>
+    </layout>
+   </item>
+  </layout>
  </widget>
- <resources/><connections/>
+ <resources/>
+ <connections/>
 </ui>
+

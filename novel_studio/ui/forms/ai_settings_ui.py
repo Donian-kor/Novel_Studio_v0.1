@@ -15,154 +15,134 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractButton, QApplication, QDialog, QDialogButtonBox,
-    QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QPushButton,
-    QSizePolicy, QSpinBox, QWidget)
+from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QFormLayout,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QSizePolicy, QSpinBox, QVBoxLayout,
+    QWidget)
 
-class Ui_QDialog(object):
+class Ui_AISettingsDialog(object):
     def setupUi(self, AISettingsDialog):
         if not AISettingsDialog.objectName():
             AISettingsDialog.setObjectName(u"AISettingsDialog")
-        AISettingsDialog.resize(720, 760)
-        self.root = QFormLayout(AISettingsDialog)
-        self.root.setObjectName(u"root")
-        self.urlLabel = QLabel(AISettingsDialog)
-        self.urlLabel.setObjectName(u"urlLabel")
+        AISettingsDialog.setMinimumSize(QSize(760, 720))
+        self.l = QVBoxLayout(AISettingsDialog)
+        self.l.setObjectName(u"l")
+        self.aiBox = QGroupBox(AISettingsDialog)
+        self.aiBox.setObjectName(u"aiBox")
+        self.f = QFormLayout(self.aiBox)
+        self.f.setObjectName(u"f")
+        self.pLbl = QLabel(self.aiBox)
+        self.pLbl.setObjectName(u"pLbl")
 
-        self.root.setWidget(0, QFormLayout.ItemRole.LabelRole, self.urlLabel)
+        self.f.setWidget(0, QFormLayout.ItemRole.LabelRole, self.pLbl)
 
-        self.urlEdit = QLineEdit(AISettingsDialog)
+        self.provider = QComboBox(self.aiBox)
+        self.provider.setObjectName(u"provider")
+
+        self.f.setWidget(0, QFormLayout.ItemRole.FieldRole, self.provider)
+
+        self.urlLbl = QLabel(self.aiBox)
+        self.urlLbl.setObjectName(u"urlLbl")
+
+        self.f.setWidget(1, QFormLayout.ItemRole.LabelRole, self.urlLbl)
+
+        self.urlEdit = QLineEdit(self.aiBox)
         self.urlEdit.setObjectName(u"urlEdit")
 
-        self.root.setWidget(0, QFormLayout.ItemRole.FieldRole, self.urlEdit)
+        self.f.setWidget(1, QFormLayout.ItemRole.FieldRole, self.urlEdit)
 
-        self.modelLabel = QLabel(AISettingsDialog)
-        self.modelLabel.setObjectName(u"modelLabel")
+        self.modelLbl = QLabel(self.aiBox)
+        self.modelLbl.setObjectName(u"modelLbl")
 
-        self.root.setWidget(1, QFormLayout.ItemRole.LabelRole, self.modelLabel)
+        self.f.setWidget(2, QFormLayout.ItemRole.LabelRole, self.modelLbl)
 
-        self.modelEdit = QLineEdit(AISettingsDialog)
+        self.modelEdit = QLineEdit(self.aiBox)
         self.modelEdit.setObjectName(u"modelEdit")
 
-        self.root.setWidget(1, QFormLayout.ItemRole.FieldRole, self.modelEdit)
+        self.f.setWidget(2, QFormLayout.ItemRole.FieldRole, self.modelEdit)
 
-        self.mb = QHBoxLayout()
-        self.mb.setObjectName(u"mb")
-        self.refreshButton = QPushButton(AISettingsDialog)
-        self.refreshButton.setObjectName(u"refreshButton")
+        self.keyLbl = QLabel(self.aiBox)
+        self.keyLbl.setObjectName(u"keyLbl")
 
-        self.mb.addWidget(self.refreshButton)
+        self.f.setWidget(3, QFormLayout.ItemRole.LabelRole, self.keyLbl)
 
-        self.testButton = QPushButton(AISettingsDialog)
-        self.testButton.setObjectName(u"testButton")
+        self.keyEdit = QLineEdit(self.aiBox)
+        self.keyEdit.setObjectName(u"keyEdit")
+        self.keyEdit.setEchoMode(QLineEdit.Password)
 
-        self.mb.addWidget(self.testButton)
+        self.f.setWidget(3, QFormLayout.ItemRole.FieldRole, self.keyEdit)
+
+        self.ab = QHBoxLayout()
+        self.ab.setObjectName(u"ab")
+        self.testBtn = QPushButton(self.aiBox)
+        self.testBtn.setObjectName(u"testBtn")
+
+        self.ab.addWidget(self.testBtn)
+
+        self.saveBtn = QPushButton(self.aiBox)
+        self.saveBtn.setObjectName(u"saveBtn")
+
+        self.ab.addWidget(self.saveBtn)
 
 
-        self.root.setLayout(2, QFormLayout.ItemRole.FieldRole, self.mb)
+        self.f.setLayout(4, QFormLayout.ItemRole.FieldRole, self.ab)
 
-        self.modelsList = QListWidget(AISettingsDialog)
-        self.modelsList.setObjectName(u"modelsList")
 
-        self.root.setWidget(3, QFormLayout.ItemRole.FieldRole, self.modelsList)
+        self.l.addWidget(self.aiBox)
 
-        self.tempLabel = QLabel(AISettingsDialog)
-        self.tempLabel.setObjectName(u"tempLabel")
+        self.editorBox = QGroupBox(AISettingsDialog)
+        self.editorBox.setObjectName(u"editorBox")
+        self.ef = QFormLayout(self.editorBox)
+        self.ef.setObjectName(u"ef")
+        self.fontLbl = QLabel(self.editorBox)
+        self.fontLbl.setObjectName(u"fontLbl")
 
-        self.root.setWidget(4, QFormLayout.ItemRole.LabelRole, self.tempLabel)
+        self.ef.setWidget(0, QFormLayout.ItemRole.LabelRole, self.fontLbl)
 
-        self.tempSpin = QDoubleSpinBox(AISettingsDialog)
-        self.tempSpin.setObjectName(u"tempSpin")
-        self.tempSpin.setMaximum(2.000000000000000)
-        self.tempSpin.setSingleStep(0.050000000000000)
-
-        self.root.setWidget(4, QFormLayout.ItemRole.FieldRole, self.tempSpin)
-
-        self.topLabel = QLabel(AISettingsDialog)
-        self.topLabel.setObjectName(u"topLabel")
-
-        self.root.setWidget(5, QFormLayout.ItemRole.LabelRole, self.topLabel)
-
-        self.topSpin = QDoubleSpinBox(AISettingsDialog)
-        self.topSpin.setObjectName(u"topSpin")
-        self.topSpin.setMaximum(1.000000000000000)
-        self.topSpin.setSingleStep(0.050000000000000)
-
-        self.root.setWidget(5, QFormLayout.ItemRole.FieldRole, self.topSpin)
-
-        self.maxLabel = QLabel(AISettingsDialog)
-        self.maxLabel.setObjectName(u"maxLabel")
-
-        self.root.setWidget(6, QFormLayout.ItemRole.LabelRole, self.maxLabel)
-
-        self.maxTokensSpin = QSpinBox(AISettingsDialog)
-        self.maxTokensSpin.setObjectName(u"maxTokensSpin")
-        self.maxTokensSpin.setMinimum(500)
-        self.maxTokensSpin.setMaximum(50000)
-
-        self.root.setWidget(6, QFormLayout.ItemRole.FieldRole, self.maxTokensSpin)
-
-        self.fontLabel = QLabel(AISettingsDialog)
-        self.fontLabel.setObjectName(u"fontLabel")
-
-        self.root.setWidget(7, QFormLayout.ItemRole.LabelRole, self.fontLabel)
-
-        self.fontEdit = QLineEdit(AISettingsDialog)
+        self.fontEdit = QLineEdit(self.editorBox)
         self.fontEdit.setObjectName(u"fontEdit")
 
-        self.root.setWidget(7, QFormLayout.ItemRole.FieldRole, self.fontEdit)
+        self.ef.setWidget(0, QFormLayout.ItemRole.FieldRole, self.fontEdit)
 
-        self.fontSizeLabel = QLabel(AISettingsDialog)
-        self.fontSizeLabel.setObjectName(u"fontSizeLabel")
+        self.sizeLbl = QLabel(self.editorBox)
+        self.sizeLbl.setObjectName(u"sizeLbl")
 
-        self.root.setWidget(8, QFormLayout.ItemRole.LabelRole, self.fontSizeLabel)
+        self.ef.setWidget(1, QFormLayout.ItemRole.LabelRole, self.sizeLbl)
 
-        self.fontSizeSpin = QSpinBox(AISettingsDialog)
-        self.fontSizeSpin.setObjectName(u"fontSizeSpin")
-        self.fontSizeSpin.setMinimum(8)
-        self.fontSizeSpin.setMaximum(48)
+        self.fontSpin = QSpinBox(self.editorBox)
+        self.fontSpin.setObjectName(u"fontSpin")
+        self.fontSpin.setMinimum(8)
+        self.fontSpin.setMaximum(60)
 
-        self.root.setWidget(8, QFormLayout.ItemRole.FieldRole, self.fontSizeSpin)
+        self.ef.setWidget(1, QFormLayout.ItemRole.FieldRole, self.fontSpin)
 
-        self.textColorLabel = QLabel(AISettingsDialog)
-        self.textColorLabel.setObjectName(u"textColorLabel")
+        self.tcLbl = QLabel(self.editorBox)
+        self.tcLbl.setObjectName(u"tcLbl")
 
-        self.root.setWidget(9, QFormLayout.ItemRole.LabelRole, self.textColorLabel)
+        self.ef.setWidget(2, QFormLayout.ItemRole.LabelRole, self.tcLbl)
 
-        self.textColorEdit = QLineEdit(AISettingsDialog)
-        self.textColorEdit.setObjectName(u"textColorEdit")
+        self.textColor = QLineEdit(self.editorBox)
+        self.textColor.setObjectName(u"textColor")
 
-        self.root.setWidget(9, QFormLayout.ItemRole.FieldRole, self.textColorEdit)
+        self.ef.setWidget(2, QFormLayout.ItemRole.FieldRole, self.textColor)
 
-        self.bgColorLabel = QLabel(AISettingsDialog)
-        self.bgColorLabel.setObjectName(u"bgColorLabel")
+        self.bcLbl = QLabel(self.editorBox)
+        self.bcLbl.setObjectName(u"bcLbl")
 
-        self.root.setWidget(10, QFormLayout.ItemRole.LabelRole, self.bgColorLabel)
+        self.ef.setWidget(3, QFormLayout.ItemRole.LabelRole, self.bcLbl)
 
-        self.bgColorEdit = QLineEdit(AISettingsDialog)
-        self.bgColorEdit.setObjectName(u"bgColorEdit")
+        self.bgColor = QLineEdit(self.editorBox)
+        self.bgColor.setObjectName(u"bgColor")
 
-        self.root.setWidget(10, QFormLayout.ItemRole.FieldRole, self.bgColorEdit)
+        self.ef.setWidget(3, QFormLayout.ItemRole.FieldRole, self.bgColor)
 
-        self.spacingLabel = QLabel(AISettingsDialog)
-        self.spacingLabel.setObjectName(u"spacingLabel")
 
-        self.root.setWidget(11, QFormLayout.ItemRole.LabelRole, self.spacingLabel)
+        self.l.addWidget(self.editorBox)
 
-        self.spacingSpin = QDoubleSpinBox(AISettingsDialog)
-        self.spacingSpin.setObjectName(u"spacingSpin")
-        self.spacingSpin.setMinimum(0.800000000000000)
-        self.spacingSpin.setMaximum(3.000000000000000)
-        self.spacingSpin.setSingleStep(0.100000000000000)
+        self.note = QLabel(AISettingsDialog)
+        self.note.setObjectName(u"note")
 
-        self.root.setWidget(11, QFormLayout.ItemRole.FieldRole, self.spacingSpin)
-
-        self.buttonBox = QDialogButtonBox(AISettingsDialog)
-        self.buttonBox.setObjectName(u"buttonBox")
-        self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
-
-        self.root.setWidget(12, QFormLayout.ItemRole.FieldRole, self.buttonBox)
+        self.l.addWidget(self.note)
 
 
         self.retranslateUi(AISettingsDialog)
@@ -171,18 +151,19 @@ class Ui_QDialog(object):
     # setupUi
 
     def retranslateUi(self, AISettingsDialog):
-        self.urlLabel.setText(QCoreApplication.translate("QDialog", u"LM Studio \uc8fc\uc18c", None))
-        self.modelLabel.setText(QCoreApplication.translate("QDialog", u"\ubaa8\ub378 ID (\ube44\uc6b0\uba74 \uccab \ubaa8\ub378)", None))
-        self.refreshButton.setText(QCoreApplication.translate("QDialog", u"\ubaa8\ub378 \uc0c8\ub85c\uace0\uce68", None))
-        self.testButton.setText(QCoreApplication.translate("QDialog", u"\uc5f0\uacb0 \ud14c\uc2a4\ud2b8", None))
-        self.tempLabel.setText(QCoreApplication.translate("QDialog", u"Temperature", None))
-        self.topLabel.setText(QCoreApplication.translate("QDialog", u"Top P", None))
-        self.maxLabel.setText(QCoreApplication.translate("QDialog", u"\ucd5c\ub300 \ucd9c\ub825 \ud1a0\ud070", None))
-        self.fontLabel.setText(QCoreApplication.translate("QDialog", u"\uc6d0\uace0 \uae00\uaf34", None))
-        self.fontSizeLabel.setText(QCoreApplication.translate("QDialog", u"\uc6d0\uace0 \uae00\uc790 \ud06c\uae30", None))
-        self.textColorLabel.setText(QCoreApplication.translate("QDialog", u"\uc6d0\uace0 \uae00\uc790 \uc0c9", None))
-        self.bgColorLabel.setText(QCoreApplication.translate("QDialog", u"\uc6d0\uace0 \ubc30\uacbd \uc0c9", None))
-        self.spacingLabel.setText(QCoreApplication.translate("QDialog", u"\uc904 \uac04\uaca9", None))
-        pass
+        AISettingsDialog.setWindowTitle(QCoreApplication.translate("AISettingsDialog", u"AI / \ud3b8\uc9d1\uae30 \uc124\uc815", None))
+        self.aiBox.setTitle(QCoreApplication.translate("AISettingsDialog", u"AI \uc5f0\uacb0", None))
+        self.pLbl.setText(QCoreApplication.translate("AISettingsDialog", u"\uc81c\uacf5\uc790", None))
+        self.urlLbl.setText(QCoreApplication.translate("AISettingsDialog", u"Base URL", None))
+        self.modelLbl.setText(QCoreApplication.translate("AISettingsDialog", u"\ubaa8\ub378", None))
+        self.keyLbl.setText(QCoreApplication.translate("AISettingsDialog", u"API Key", None))
+        self.testBtn.setText(QCoreApplication.translate("AISettingsDialog", u"\uc5f0\uacb0 \ud14c\uc2a4\ud2b8", None))
+        self.saveBtn.setText(QCoreApplication.translate("AISettingsDialog", u"\uc800\uc7a5", None))
+        self.editorBox.setTitle(QCoreApplication.translate("AISettingsDialog", u"\uc6d0\uace0 \ud3b8\uc9d1\uae30", None))
+        self.fontLbl.setText(QCoreApplication.translate("AISettingsDialog", u"\uae00\uaf34", None))
+        self.sizeLbl.setText(QCoreApplication.translate("AISettingsDialog", u"\uae00\uc790 \ud06c\uae30", None))
+        self.tcLbl.setText(QCoreApplication.translate("AISettingsDialog", u"\uae00\uc790 \uc0c9", None))
+        self.bcLbl.setText(QCoreApplication.translate("AISettingsDialog", u"\ubc30\uacbd \uc0c9", None))
+        self.note.setText(QCoreApplication.translate("AISettingsDialog", u"API Key\ub294 \uc6b4\uc601\uccb4\uc81c \ubcf4\uc548 \uc800\uc7a5\uc18c(keyring)\uc5d0 \uc800\uc7a5\ud569\ub2c8\ub2e4. \uae00\uaf34/\uc0c9\uc0c1 \uc124\uc815\uc740 \uc791\ud488 \uc0dd\uc131 \uc5ec\ubd80\uc640 \uad00\uacc4\uc5c6\uc774 \uc0ac\uc6a9\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.", None))
     # retranslateUi
 

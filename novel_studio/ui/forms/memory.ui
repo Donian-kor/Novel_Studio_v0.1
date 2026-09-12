@@ -1,9 +1,1 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0">
- <class>QWidget</class>
- <widget class="QWidget" name="MemoryView">
-  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
-<layout class="QVBoxLayout" name="root"><item><widget class="QLabel" name="pageTitle"><property name="text"><string>기억 / 연속성</string></property></widget></item><item><widget class="QPlainTextEdit" name="memoryEdit"><property name="readOnly"><bool>true</bool></property></widget></item><item><layout class="QHBoxLayout" name="buttons"><item><widget class="QPushButton" name="summarizeButton"><property name="text"><string>AI 기억 생성</string></property></widget></item><item><widget class="QPushButton" name="checkButton"><property name="text"><string>AI 연속성 검증</string></property></widget></item></layout></item></layout>
- </widget>
- <resources/><connections/>
-</ui>
+<?xml version="1.0" encoding="UTF-8"?><ui version="4.0"><class>MemoryPage</class><widget class="QWidget" name="MemoryPage"><layout class="QVBoxLayout" name="l"><item><widget class="QLabel" name="hint"><property name="text"><string>화별 기억과 연속성 검사 결과</string></property></widget></item><item><widget class="QPlainTextEdit" name="edit"/></item></layout></widget><resources/><connections/></ui>
