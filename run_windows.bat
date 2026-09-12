@@ -1,8 +1,11 @@
 @echo off
-cd /d "%~dp0"
-if not exist .venv\Scripts\python.exe (
-  python -m venv .venv
-  .venv\Scripts\python.exe -m pip install -r requirements.txt
+setlocal
+cd /d %~dp0
+if not exist .venv (
+  py -m venv .venv
 )
-.venv\Scripts\python.exe main.py
-pause
+call .venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python main.py
+endlocal
