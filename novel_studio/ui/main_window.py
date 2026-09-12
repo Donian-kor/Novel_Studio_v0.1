@@ -1,10 +1,13 @@
 from pathlib import Path
 import logging
+import os
+import sys
+import subprocess
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QListWidget,
                                  QStackedWidget, QLabel, QPushButton, QFrame,
                                  QPlainTextEdit, QDialog)
 from PySide6.QtCore import QThreadPool
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence
 from novel_studio.ui.loader import load_ui
 from novel_studio.ui.views.planning import PlanningView
 from novel_studio.ui.views.entities import EntitiesView
@@ -19,7 +22,10 @@ from novel_studio.db.database import Database
 from novel_studio.ai.provider_manager import ProviderManager
 from novel_studio.ai.engine import AIEngine
 from novel_studio.ai.context import ContextManager
-from novel_studio.ai.prompts import chat_system, entity_extra
+from novel_studio.ai.prompts import (chat_system, entity_extra, master as master_prompt,
+                                     contract as contract_prompt,
+                                     master_plot as master_plot_prompt, idea as idea_prompt,
+                                     SECTIONS)
 from novel_studio.services.idea_service import IdeaService
 from novel_studio.planning.master_planner import MasterPlanner
 from novel_studio.plot.plot_manager import PlotManager
@@ -27,8 +33,8 @@ from novel_studio.plot.parser import parse_chapter_plans
 from novel_studio.manuscript.chapter_writer import ChapterWriter
 from novel_studio.memory.memory_manager import MemoryManager
 from novel_studio.continuity.checker import ContinuityChecker
-from novel_studio.jobs.worker import Job
-from novel_studio.ui.dialogs import AISettingsDialog
+from novel_studio.jobs.worker import Job, StreamJob
+from novel_studio.ui.dialogs import AISettingsDialog, ProjectSettingsDialog
 from novel_studio.utils.text import count_chars, strip_ai_marks, check_spelling
 
 logger = logging.getLogger(__name__)
@@ -48,8 +54,14 @@ class MainWindow(QMainWindow):
         self._init_services()
         self._init_ui()
         self.chat_window = ChatWindow(self)
-        self.chat_window.show()
+        # 메인 창이 닫히면 독립 채팅창도 함께 닫아 앱이 정상 종료되게 한다
+        try:
+            self.destroyed.connect(self.chat_window.close)
+        except Exception:
+            pass
+        self._save_last_project()
         self._load_all()
+        self._build_project_menu()
     def _init_services(self):
         self.pm=ProjectManager(); self.pm.open(self.project_root); self.app=AppSettings(); self.db=Database(self.project_root/'novel.db'); total=int(self.pm.settings.get('target_chapters',500)); target=int(self.pm.settings.get('chapter_chars',5000)); self.db.ensure_chapters(total,target); self.providers=ProviderManager(self.app); self.ai=AIEngine(self.providers,self.app); self.context=ContextManager(self.db,self.pm,self.app); self.idea_service=IdeaService(self.db,self.ai,self.pm); self.master=MasterPlanner(self.db,self.ai,self.pm); self.plot=PlotManager(self.db,self.ai,self.pm); self.writer=ChapterWriter(self.db,self.ai,self.pm,self.context); self.memory=MemoryManager(self.db,self.ai); self.checker=ContinuityChecker(self.db,self.ai,self.context)
     def _init_ui(self):
@@ -101,6 +113,152 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.warning('대시보드 갱신 실패: %s', e)
 
+    # ---------- 요청 1: 메인 화면 프로젝트 관리 ----------
+    def _build_project_menu(self):
+        """상단 메뉴바에 [프로젝트] 메뉴 추가 (새로 만들기/열기/설정)."""
+        try:
+            mb = self.menuBar()
+            if mb is None:
+                return
+            mnu = mb.addMenu('프로젝트')
+            a1 = QAction('새 프로젝트', self); a1.triggered.connect(self.new_project); mnu.addAction(a1)
+            a2 = QAction('프로젝트 열기', self); a2.triggered.connect(self.open_project); mnu.addAction(a2)
+            mnu.addSeparator()
+            a3 = QAction('프로젝트 설정', self); a3.triggered.connect(self.edit_project_settings); mnu.addAction(a3)
+            # ---------- 도움말 메뉴 ----------
+            hlp = mb.addMenu('도움말')
+            h1 = QAction('사용법', self); h1.setShortcut(QKeySequence('F1')); h1.triggered.connect(self.open_help); hlp.addAction(h1)
+            h2 = QAction('단축키', self); h2.triggered.connect(lambda: self.open_help('sec-shortcuts')); hlp.addAction(h2)
+            hlp.addSeparator()
+            h3 = QAction('Novel Studio 정보', self); h3.triggered.connect(self.show_about); hlp.addAction(h3)
+        except Exception as e:
+            logger.warning('프로젝트 메뉴 생성 실패: %s', e)
+
+    # ---------- 도움말 (내장 사용법) ----------
+    def open_help(self, anchor=None):
+        """내장 도움말 대화상자를 연다. anchor가 있으면 해당 섹션으로 이동."""
+        try:
+            from novel_studio.ui.help import HelpDialog
+            dlg = HelpDialog(self, anchor=anchor)
+            dlg.exec()
+        except Exception as e:
+            logger.error('도움말 열기 실패: %s', e)
+            QMessageBox.critical(self, '도움말 오류', f'도움말을 여는 중 오류가 발생했습니다.\n{e}')
+
+    def show_about(self):
+        QMessageBox.about(
+            self, 'Novel Studio 정보',
+            '<b>Novel Studio</b> v1.0 Final<br><br>'
+            '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
+            '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
+
+    def _save_last_project(self, root=None):
+        """요청: 다음 실행 때 자동으로 열기 위해 마지막 프로젝트 경로를 저장한다."""
+        try:
+            self.app.data['last_project'] = str(root or self.project_root)
+            self.app.save()
+        except Exception as e:
+            logger.warning('마지막 프로젝트 저장 실패: %s', e)
+
+    def _restart_with(self, root):
+        """프로젝트 전환: 새 프로세스로 재시작해 해당 프로젝트를 연다."""
+        try:
+            script = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'main.py'))
+            subprocess.Popen([sys.executable, script, str(root)])
+        except Exception as e:
+            logger.error('프로젝트 전환 실패: %s', e)
+        os._exit(0)
+
+    def new_project(self):
+        from novel_studio.ui.startup import StartupDialog
+        dlg = StartupDialog()
+        if dlg.exec() == dlg.DialogCode.Accepted and dlg.selected_project:
+            self._save_last_project(dlg.selected_project)
+            self._restart_with(dlg.selected_project)
+
+    def open_project(self):
+        from novel_studio.ui.startup import StartupDialog
+        dlg = StartupDialog()
+        if dlg.exec() == dlg.DialogCode.Accepted and dlg.selected_project:
+            self._save_last_project(dlg.selected_project)
+            self._restart_with(dlg.selected_project)
+
+    def edit_project_settings(self):
+        d = ProjectSettingsDialog(self.pm, self)
+        if d.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            total = int(self.pm.settings['target_chapters'])
+            target = int(self.pm.settings['chapter_chars'])
+            self.db.ensure_chapters(total, target)
+        except Exception:
+            pass
+        self._save_last_project()
+        self._update_state()
+        self._load_chapters()
+        self.refresh_dashboard()
+        self.views[0].refresh()
+        QMessageBox.information(self, '저장 완료', '프로젝트 설정이 저장되었습니다.')
+
+    # ---------- 요청 4: 실시간 스트리밍 ----------
+    def _run_stream(self, label, fn, done, append=None):
+        """스트리밍 AI 작업 실행. append는 토큰이 실시간으로 채워질 QPlainTextEdit."""
+        if self._busy:
+            QMessageBox.warning(self, '작업 중',
+                                '이미 AI 작업이 실행 중입니다.\n정지하려면 상단의 ⏹ 정지 버튼을 누르세요.')
+            return
+        self._busy = True
+        if hasattr(self, 'stopBtn'):
+            self.stopBtn.setEnabled(True)
+        self.statusBar().showMessage(label)
+        job = StreamJob(fn)
+        self._current_job = job
+        self._stream_target = None
+        if append is not None:
+            # 원고 에디터로 스트리밍할 때 잦은 textChanged 갱신으로 UI가 느려지지 않도록 차단
+            if append is self.views[4].editor:
+                append.blockSignals(True)
+                self._stream_target = append
+            job.signals.progress.connect(lambda t, w=append: self._append_token(w, t))
+        job.signals.finished.connect(lambda v: self._on_done(done, v))
+        job.signals.error.connect(self._on_error)
+        job.signals.cancelled.connect(self._on_cancelled)
+        self.pool.start(job)
+
+    def _append_token(self, widget, t):
+        """토큰 조각을 위젯 끝에 실시간으로 입력한다."""
+        try:
+            cur = widget.textCursor()
+            cur.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.MoveAnchor)
+            widget.setTextCursor(cur)
+            widget.insertPlainText(t)
+        except Exception:
+            pass
+        if widget is getattr(self.views[4], 'editor', None):
+            self._stream_tick = getattr(self, '_stream_tick', 0) + 1
+            if self._stream_tick % 25 == 0:
+                self.update_count()
+
+    def _check_write_prereq(self):
+        """요청 2: 기획/설정 없이 원고를 쓰지 못하도록 차단."""
+        if not self.db.get_plan() and not self.db.get_meta('master_plot', ''):
+            QMessageBox.information(
+                self, '기획 필요',
+                '아직 작품 기획이 없습니다.\n\n'
+                '[기획] 탭에서 아래 순서를 먼저 진행하세요.\n'
+                '1) AI 아이디어 생성 → 이 아이디어 사용\n'
+                '2) AI 마스터 기획 생성\n'
+                '3) AI 핵심 기준 추출\n'
+                '4) AI 전체 플롯 생성')
+            return False
+        if not self.db.get_meta('master_plot', ''):
+            QMessageBox.information(
+                self, '전체 플롯 필요',
+                '마스터 기획은 있지만 전체 플롯이 없습니다.\n\n'
+                '[기획] 탭에서 [AI 전체 플롯 생성]을 먼저 실행하세요.')
+            return False
+        return True
+
     def _wire_manuscript_buttons(self, m):
         """하단바 버튼 제거 대신 원고 뷰 내부 버튼을 찾아 연결 (라벨 변경 포함)."""
         mapping = {}
@@ -149,6 +307,14 @@ class MainWindow(QMainWindow):
         self._current_job = None
         if hasattr(self, 'stopBtn'):
             self.stopBtn.setEnabled(False)
+        # 스트리밍 중 블로킹했던 에디터 신호를 복구한다
+        target = getattr(self, '_stream_target', None)
+        if target is not None:
+            try:
+                target.blockSignals(False)
+            except Exception:
+                pass
+            self._stream_target = None
     def _stop(self):
         """⏹ 정지 버튼: 실행 중인 AI 작업을 취소한다."""
         if self._current_job is not None and self._busy:
@@ -183,7 +349,22 @@ class MainWindow(QMainWindow):
         v=self.views[4]; v.chapterList.clear();
         for r in self.db.chapters(): v.chapterList.addItem(f"{r['number']:03d}화 | {r['status']} | {r['char_count']:,}자")
         self.refresh_dashboard()
-    def generate_idea(self): self._run('AI 아이디어 생성 중...',self.idea_service.generate,lambda t:self.views[0].ideaEdit.setPlainText(t))
+    def generate_idea(self):
+        def stream(on_token):
+            previous = '\n'.join(r['content'] for r in self.db.recent_ideas(10))
+            collected = []
+            for t in self.ai.generate_stream(idea_prompt(self.pm.settings, previous),
+                                             temperature=.9, max_tokens=800):
+                if self._current_job is not None and self._current_job.is_cancelled():
+                    break
+                on_token(t)
+                collected.append(t)
+            out = ''.join(collected)
+            if out.strip():
+                self.db.add_idea(out)
+            return out
+        self._run_stream('AI 아이디어 생성 중...', stream, lambda t: None,
+                         append=self.views[0].ideaEdit)
     def use_idea(self):
         t = self.views[0].ideaEdit.toPlainText().strip()
         if not t:
@@ -196,17 +377,66 @@ class MainWindow(QMainWindow):
     def generate_master(self):
         t=self.views[0].ideaEdit.toPlainText().strip() or self.db.get_meta('idea','')
         if not t: QMessageBox.warning(self,'아이디어 필요','아이디어를 먼저 입력하거나 AI로 생성하세요.'); return
-        self._run('AI 마스터 기획 생성 중...',lambda:self.master.create_master(t),lambda _:self.views[0].refresh())
+        def stream(on_token):
+            collected = []
+            for piece in self.ai.generate_stream(
+                    [{'role': 'system', 'content': '장편 웹소설 마스터 기획자'},
+                     {'role': 'user', 'content': master_prompt(t, self.pm.settings)}],
+                    temperature=.72, max_tokens=12000):
+                if self._current_job is not None and self._current_job.is_cancelled():
+                    break
+                on_token(piece)
+                collected.append(piece)
+            out = ''.join(collected)
+            if out.strip():
+                self.db.save_plan(out)
+                self.db.set_meta('idea', t)
+            return out
+        self._run_stream('AI 마스터 기획 생성 중...', stream,
+                         lambda _: self.views[0].refresh(),
+                         append=self.views[0].masterEdit)
     def save_master(self): self.db.save_plan(self.views[0].masterEdit.toPlainText()); self.statusBar().showMessage('마스터 기획 저장 완료')
     def save_contract(self): self.db.save_contract(self.views[0].contractEdit.toPlainText(),False); self.statusBar().showMessage('핵심 기준 저장 완료')
     def save_master_plot(self): self.db.set_meta('master_plot',self.views[0].masterPlotEdit.toPlainText()); self.statusBar().showMessage('전체 플롯 저장 완료')
     def generate_contract(self):
         if not self.db.get_plan(): return
-        self._run('장편 핵심 기준 추출 중...',self.master.extract_contract,lambda t:self.views[0].contractEdit.setPlainText(t))
+        txt = '\n\n'.join(f'[{s}]\n{self.db.section_content(s)}' for s in SECTIONS)
+        def stream(on_token):
+            collected = []
+            for piece in self.ai.generate_stream(
+                    contract_prompt(self.db.get_plan(), txt, int(self.pm.settings['target_chapters'])),
+                    temperature=.22, max_tokens=6000):
+                if self._current_job is not None and self._current_job.is_cancelled():
+                    break
+                on_token(piece)
+                collected.append(piece)
+            out = ''.join(collected)
+            if out.strip():
+                self.db.save_contract(out, False)
+            return out
+        self._run_stream('장편 핵심 기준 추출 중...', stream, lambda _: None,
+                         append=self.views[0].contractEdit)
     def lock_contract(self): self.db.save_contract(self.views[0].contractEdit.toPlainText(),True); self.statusBar().showMessage('핵심 기준 잠금 완료')
     def generate_master_plot(self):
         if not self.db.get_contract(): QMessageBox.warning(self,'핵심 기준 필요','먼저 핵심 기준을 추출하세요.'); return
-        self._run('AI 전체 플롯 생성 중...',self.plot.generate_master,lambda t:self.views[0].masterPlotEdit.setPlainText(t))
+        c = self.db.get_contract()
+        def stream(on_token):
+            collected = []
+            for piece in self.ai.generate_stream(
+                    master_plot_prompt(self.db.get_plan(), c['content'] if c else '',
+                                       int(self.pm.settings['target_chapters'])),
+                    temperature=.62, max_tokens=12000):
+                if self._current_job is not None and self._current_job.is_cancelled():
+                    break
+                on_token(piece)
+                collected.append(piece)
+            out = ''.join(collected)
+            if out.strip():
+                self.db.set_meta('master_plot', out)
+            return out
+        self._run_stream('AI 전체 플롯 생성 중...', stream,
+                         lambda _: self.views[0].refresh(),
+                         append=self.views[0].masterPlotEdit)
     def generate_sections(self):
         if not self.db.get_meta('master_plot',''): QMessageBox.warning(self,'전체 플롯 필요','먼저 전체 플롯을 생성하세요.'); return
         def work():
@@ -242,7 +472,22 @@ class MainWindow(QMainWindow):
         t=self.views[4].editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.views[4].countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자'); self.ui.findChild(QLabel,'countLabel').setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
     def save_current(self):
         v=self.views[4]; t=v.editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.pm.save_chapter(self.current,t); self.db.set_chapter_meta(self.current,v.titleEdit.text().strip() or f'{self.current}화','작성완료' if t.strip() else '미작성',n,ns,target); self._load_chapters(); self.statusBar().showMessage(f'{self.current}화 저장 완료')
-    def write_current(self): self._run(f'{self.current}화 AI 집필 중...',lambda:self.writer.write(self.current),self._after_write)
+    def write_current(self):
+        """요청 2·4: 기획 확인 후 실시간 스트리밍으로 집필한다."""
+        if not self._check_write_prereq():
+            return
+
+        def stream(on_token):
+            collected = []
+            for t in self.writer.write_stream(self.current):
+                if self._current_job is not None and self._current_job.is_cancelled():
+                    break
+                on_token(t)
+                collected.append(t)
+            return ''.join(collected)
+
+        self._run_stream(f'{self.current}화 AI 집필 중...', stream, self._after_write,
+                         append=self.views[4].editor)
     def _after_write(self,t):
         if self._current_job is not None and self._current_job.is_cancelled():
             return
@@ -301,7 +546,21 @@ class MainWindow(QMainWindow):
         msg=self.chat_window.input.toPlainText().strip();
         if not msg:return
         self.chat_window.input.clear(); self.db.add_chat('user',msg,self.current); hits=self.db.search(msg,40); evidence='\n'.join(f'[{l}] {r}' for l,r in hits); ctx=self.context.build(self.current,msg)+'\n\n[DB SEARCH EVIDENCE]\n'+evidence
-        self._run('AI 작품 비서 응답 중...',lambda:self.ai.generate([{'role':'system','content':chat_system(ctx)},{'role':'user','content':msg}],temperature=.55,max_tokens=10000),lambda t:(self.db.add_chat('assistant',t,self.current),self.chat_window.refresh(self.db.chat_messages())))
+        def stream(on_token):
+            on_token('\nAI: ')
+            collected = []
+            for t in self.ai.generate_stream([{'role':'system','content':chat_system(ctx)},
+                                              {'role':'user','content':msg}],
+                                             temperature=.55, max_tokens=10000):
+                if self._current_job is not None and self._current_job.is_cancelled():
+                    break
+                on_token(t)
+                collected.append(t)
+            return ''.join(collected)
+        self._run_stream('AI 작품 비서 응답 중...', stream,
+                         lambda t:(self.db.add_chat('assistant',t,self.current),
+                                   self.chat_window.refresh(self.db.chat_messages())),
+                         append=self.chat_window.log)
     def open_ai_chat(self): self.chat_window.show(); self.chat_window.raise_(); self.chat_window.activateWindow()
     def open_settings(self):
         d=AISettingsDialog(self.providers,self.app,self)

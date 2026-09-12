@@ -4,6 +4,11 @@ class AIProvider(ABC):
     def __init__(self, config): self.config=config
     @abstractmethod
     def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None): ...
+    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        """스트리밍 폴백: 스트리밍 미지원 provider는 전체 결과를 한 번에 yield."""
+        text = self.chat(messages, temperature=temperature, top_p=top_p,
+                         max_tokens=max_tokens, timeout=timeout)
+        yield text
     def list_models(self): return []
     def quick_test(self):
         """짧은 타임아웃 연결 테스트 (기본 구현)."""

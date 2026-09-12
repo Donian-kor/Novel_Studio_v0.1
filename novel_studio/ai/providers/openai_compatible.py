@@ -36,6 +36,42 @@ class OpenAICompatibleProvider(AIProvider):
             raise ProviderError(f'API HTTP {e.code}: {body_text}')
         except Exception as e: raise ProviderError(f'AI 요청 실패: {e}')
 
+    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=CHAT_TIMEOUT):
+        """OpenAI 호환 SSE 스트리밍. 토큰 단위로 조각을 yield한다."""
+        model=self.config.get('model','')
+        if not model:
+            models=self.list_models(); model=models[0] if models else ''
+        if not model: raise ProviderError('사용할 모델을 설정하세요.')
+        body={'model':model,'messages':messages,'temperature':temperature,'top_p':top_p,'max_tokens':max_tokens,'stream':True}
+        req=urllib.request.Request(self._base()+'/chat/completions',data=json.dumps(body,ensure_ascii=False).encode(),headers=self._headers(),method='POST')
+        try:
+            with urllib.request.urlopen(req,timeout=timeout) as r:
+                while True:
+                    line = r.readline().decode('utf-8', errors='ignore')
+                    if not line:
+                        break
+                    line = line.strip()
+                    if not line.startswith('data:'):
+                        continue
+                    data = line[5:].strip()
+                    if data == '[DONE]':
+                        break
+                    try:
+                        d = json.loads(data)
+                        delta = d['choices'][0].get('delta', {}).get('content')
+                        if delta:
+                            yield delta
+                    except Exception:
+                        continue
+        except urllib.error.HTTPError as e:
+            body_text = ''
+            try:
+                body_text = e.read().decode(errors='ignore')[:2000]
+            except Exception:
+                pass
+            raise ProviderError(f'API HTTP {e.code}: {body_text}')
+        except Exception as e: raise ProviderError(f'AI 요청 실패: {e}')
+
     def quick_test(self):
         """짧은 타임아웃으로 연결 테스트를 수행한다.
 

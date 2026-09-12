@@ -44,3 +44,36 @@ class Job(QRunnable):
                 self.signals.cancelled.emit()
             else:
                 self.signals.error.emit(str(e))
+
+
+class StreamJob(Job):
+    """토큰 스트리밍 작업.
+
+    fn(callback) 형태로 받는다. fn은 생성되는 토큰마다 callback(token)을
+    호출하며(→ progress 시그널 방출), 마지막에 전체 텍스트를 return한다.
+    """
+
+    @Slot()
+    def run(self):
+        if self._cancelled:
+            self.signals.cancelled.emit()
+            return
+        collected = []
+
+        def on_token(t):
+            if not t:
+                return
+            collected.append(t)
+            self.signals.progress.emit(t)
+
+        try:
+            total = self.fn(on_token) or ''.join(collected)
+            if self._cancelled:
+                self.signals.cancelled.emit()
+            else:
+                self.signals.finished.emit(total)
+        except Exception as e:
+            if self._cancelled:
+                self.signals.cancelled.emit()
+            else:
+                self.signals.error.emit(str(e))

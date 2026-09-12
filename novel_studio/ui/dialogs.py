@@ -1,4 +1,7 @@
-from PySide6.QtWidgets import QDialog,QMessageBox,QVBoxLayout,QWidget
+from PySide6.QtWidgets import (QDialog, QMessageBox, QVBoxLayout, QWidget,
+                               QFormLayout, QLineEdit, QComboBox, QSpinBox,
+                               QPushButton, QLabel, QHBoxLayout)
+from PySide6.QtCore import Qt
 from novel_studio.ui.loader import load_ui
 class AISettingsDialog(QDialog):
     def __init__(self,providers,settings,parent=None):
@@ -41,3 +44,60 @@ class AISettingsDialog(QDialog):
             QMessageBox.information(self, '연결 테스트', shown)
         except Exception as e:
             QMessageBox.critical(self, '연결 실패', str(e))
+
+
+class ProjectSettingsDialog(QDialog):
+    """요청 1-3: 현재 프로젝트 설정(작품명/장르/분위기/화수/글자수/오차/구간) 편집."""
+
+    def __init__(self, pm, parent=None):
+        super().__init__(parent)
+        self.pm = pm
+        s = pm.settings
+        self.setWindowTitle('프로젝트 설정')
+        lay = QVBoxLayout(self)
+        form = QFormLayout()
+        self.titleEdit = QLineEdit(str(s.get('title', '')))
+        self.genreEdit = QComboBox(); self.genreEdit.setEditable(True)
+        from novel_studio.ai.prompts import GENRES
+        self.genreEdit.addItems([g for g in GENRES if g != '직접 입력'])
+        self.genreEdit.setCurrentText(str(s.get('genre', '') or '선협'))
+        self.moodEdit = QLineEdit(str(s.get('mood', '')))
+        self.totalSpin = QSpinBox(); self.totalSpin.setRange(1, 5000)
+        self.totalSpin.setValue(int(s.get('target_chapters', 500)))
+        self.charSpin = QSpinBox(); self.charSpin.setRange(500, 30000)
+        self.charSpin.setValue(int(s.get('chapter_chars', 5000)))
+        self.tolSpin = QSpinBox(); self.tolSpin.setRange(0, 5000)
+        self.tolSpin.setValue(int(s.get('tolerance', 300)))
+        self.sectionSpin = QSpinBox(); self.sectionSpin.setRange(1, 50)
+        self.sectionSpin.setValue(int(s.get('section_size', 5)))
+        form.addRow('작품명', self.titleEdit)
+        form.addRow('장르', self.genreEdit)
+        form.addRow('분위기', self.moodEdit)
+        form.addRow('총 화수', self.totalSpin)
+        form.addRow('화당 목표 글자수', self.charSpin)
+        form.addRow('허용 오차 (±글자수)', self.tolSpin)
+        form.addRow('스토리 구간 크기 (화)', self.sectionSpin)
+        lay.addLayout(form)
+        help_ = QLabel('허용 오차: AI 집필 시 목표 글자수 ± 범위 (예: 5000±300 → 4700~5300자).\n'
+                       '스토리 구간 크기: 한 구간에 묶을 화 수 (예: 5 → 1~5화, 6~10화 …).')
+        help_.setWordWrap(True)
+        lay.addWidget(help_)
+        row = QHBoxLayout()
+        save = QPushButton('저장'); save.clicked.connect(self.accept_changes)
+        cancel = QPushButton('취소'); cancel.clicked.connect(self.reject)
+        row.addWidget(save); row.addWidget(cancel)
+        lay.addLayout(row)
+        self.resize(500, 470)
+
+    def accept_changes(self):
+        vals = {
+            'title': self.titleEdit.text().strip() or '새 작품',
+            'genre': self.genreEdit.currentText().strip() or '선협',
+            'mood': self.moodEdit.text().strip(),
+            'target_chapters': self.totalSpin.value(),
+            'chapter_chars': self.charSpin.value(),
+            'tolerance': self.tolSpin.value(),
+            'section_size': self.sectionSpin.value(),
+        }
+        self.pm.save_settings(vals)
+        self.accept()
