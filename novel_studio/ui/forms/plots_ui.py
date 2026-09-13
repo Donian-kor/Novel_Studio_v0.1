@@ -17,7 +17,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QPlainTextEdit, QPushButton, QSizePolicy,
-    QSpinBox, QVBoxLayout, QWidget)
+    QSpinBox, QSplitter, QVBoxLayout, QWidget)
 
 class Ui_PlotsPage(object):
     def setupUi(self, PlotsPage):
@@ -58,28 +58,35 @@ class Ui_PlotsPage(object):
 
         self.top.addWidget(self.allBtn)
 
+        self.hierBtn = QPushButton(PlotsPage)
+        self.hierBtn.setObjectName(u"hierBtn")
+
+        self.top.addWidget(self.hierBtn)
+
         self.improveBtn = QPushButton(PlotsPage)
         self.improveBtn.setObjectName(u"improveBtn")
 
         self.top.addWidget(self.improveBtn)
 
+        self.saveBtn = QPushButton(PlotsPage)
+        self.saveBtn.setObjectName(u"saveBtn")
+
+        self.top.addWidget(self.saveBtn)
+
 
         self.l.addLayout(self.top)
 
-        self.body = QHBoxLayout()
-        self.body.setObjectName(u"body")
-        self.list = QListWidget(PlotsPage)
+        self.plotsSplitter = QSplitter(PlotsPage)
+        self.plotsSplitter.setObjectName(u"plotsSplitter")
+        self.plotsSplitter.setOrientation(Qt.Horizontal)
+        self.list = QListWidget(self.plotsSplitter)
         self.list.setObjectName(u"list")
-
-        self.body.addWidget(self.list)
-
-        self.detail = QPlainTextEdit(PlotsPage)
+        self.plotsSplitter.addWidget(self.list)
+        self.detail = QPlainTextEdit(self.plotsSplitter)
         self.detail.setObjectName(u"detail")
+        self.plotsSplitter.addWidget(self.detail)
 
-        self.body.addWidget(self.detail)
-
-
-        self.l.addLayout(self.body)
+        self.l.addWidget(self.plotsSplitter)
 
 
         self.retranslateUi(PlotsPage)
@@ -91,7 +98,9 @@ class Ui_PlotsPage(object):
         self.dash.setText(QCoreApplication.translate("PlotsPage", u"~", None))
         self.generateBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \ud654\ubcc4 \ud50c\ub86f \uc0dd\uc131", None))
         self.allBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \uc804\uccb4 \ud654\ubcc4 \ud50c\ub86f \uc0dd\uc131", None))
+        self.hierBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \uad6c\uac04\ubcc4 \ud50c\ub86f \uc0dd\uc131", None))
         self.improveBtn.setText(QCoreApplication.translate("PlotsPage", u"AI \uc120\ud0dd \ud50c\ub86f \uac1c\uc120", None))
+        self.saveBtn.setText(QCoreApplication.translate("PlotsPage", u"\uc800\uc7a5", None))
         pass
     # retranslateUi
 

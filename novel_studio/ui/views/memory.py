@@ -1,8 +1,8 @@
 from ._base import BaseView
-from PySide6.QtWidgets import QPlainTextEdit
+from PySide6.QtWidgets import QPlainTextEdit,QPushButton
 class MemoryView(BaseView):
     def __init__(self,w):
-        super().__init__(w); self.mount('memory.ui'); self.w=w; self.edit=self.ui.findChild(QPlainTextEdit,'edit')
+        super().__init__(w); self.mount('memory.ui'); self.w=w; self.edit=self.ui.findChild(QPlainTextEdit,'edit'); self.refreshMemoryBtn=self.ui.findChild(QPushButton,'refreshMemoryBtn'); self.auditBtn=self.ui.findChild(QPushButton,'auditBtn')
         # 이전에 저장한 기억/연속성 메모 복원
         try: self.edit.setPlainText(self.w.db.get_meta('memory_notes',''))
         except Exception: pass

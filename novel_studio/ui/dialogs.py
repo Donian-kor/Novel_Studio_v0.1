@@ -1,18 +1,70 @@
 from PySide6.QtWidgets import (QDialog, QMessageBox, QVBoxLayout, QWidget,
                                QFormLayout, QLineEdit, QComboBox, QSpinBox,
-                               QPushButton, QLabel, QHBoxLayout)
+                               QPushButton, QLabel, QHBoxLayout, QColorDialog,
+                               QFontComboBox, QSlider)
 from PySide6.QtCore import Qt
 from novel_studio.ui.loader import load_ui
 class AISettingsDialog(QDialog):
     def __init__(self,providers,settings,parent=None):
-        super().__init__(parent); ui=load_ui('ai_settings.ui'); lay=QVBoxLayout(self); lay.setContentsMargins(0,0,0,0); lay.addWidget(ui); self.ui=ui; self.pm,self.settings=providers,settings
-        for n in ['provider','urlEdit','modelEdit','keyEdit','testBtn','saveBtn','fontEdit','fontSpin','textColor','bgColor']: setattr(self,n,ui.findChild(QWidget,n))
-        self.ids=list(providers.IDS); self.provider.addItems([providers.IDS[x] for x in self.ids]); self.fontEdit.setText(str(settings.data['editor']['font_family'])); self.fontSpin.setValue(int(settings.data['editor']['font_size'])); self.textColor.setText(settings.data['editor']['text_color']); self.bgColor.setText(settings.data['editor']['bg_color']); self.provider.currentIndexChanged.connect(self.load_provider); self.load_provider(self.ids.index(settings.data['active_provider'])); self.testBtn.clicked.connect(self.test); self.saveBtn.clicked.connect(self.save); self.resize(780,740)
+        super().__init__(parent)
+        ui=load_ui('ai_settings.ui')
+        lay=QVBoxLayout(self)
+        lay.setContentsMargins(0,0,0,0)
+        lay.addWidget(ui)
+        self.ui=ui
+        self.pm,self.settings=providers,settings
+        for n in ['provider','urlEdit','modelEdit','keyEdit','testBtn','saveBtn','fontEdit','fontSpin','fontSizeValue','textColor','bgColor']:
+            setattr(self,n,ui.findChild(QWidget,n))
+        self.ids=list(providers.IDS)
+        self.provider.addItems([providers.IDS[x] for x in self.ids])
+        self._load_editor_controls()
+        self.provider.currentIndexChanged.connect(self.load_provider)
+        self.load_provider(self.ids.index(settings.data['active_provider']))
+        self.testBtn.clicked.connect(self.test)
+        self.saveBtn.clicked.connect(self.save)
+        self.fontSpin.valueChanged.connect(lambda v: self.fontSizeValue.setText(f'{v} pt'))
+        self.textColor.clicked.connect(lambda: self._pick_color(self.textColor))
+        self.bgColor.clicked.connect(lambda: self._pick_color(self.bgColor))
+        self.resize(780,740)
     def load_provider(self,i):
         if not self.ids:return
         pid=self.ids[i]; c=self.pm.config(pid); self.urlEdit.setText(c.get('base_url','')); self.modelEdit.setText(c.get('model','')); self.keyEdit.setText(c.get('api_key',''))
+
+    def _load_editor_controls(self):
+        editor=self.settings.data.get('editor', {})
+        family=str(editor.get('font_family','Malgun Gothic'))
+        self.fontEdit.setCurrentFont(__import__('PySide6.QtGui', fromlist=['QFont']).QFont(family))
+        self.fontSpin.setValue(int(editor.get('font_size',18)))
+        self._set_color_button(self.textColor, str(editor.get('text_color','#E8E6E3')))
+        self._set_color_button(self.bgColor, str(editor.get('bg_color','#2B2B2B')))
+        self.fontSizeValue.setText(f'{self.fontSpin.value()} pt')
+
+    def _set_color_button(self, button, value):
+        from PySide6.QtGui import QColor
+        c=QColor(value)
+        if not c.isValid():
+            c=QColor('#E8E6E3' if button is self.textColor else '#2B2B2B')
+        button.setText(c.name().upper())
+        button.setStyleSheet(f'QPushButton{{background:{c.name()}; color:{"#000000" if c.lightness() > 160 else "#FFFFFF"}; border:1px solid #777; padding:6px 10px;}}')
+
+    def _pick_color(self, button):
+        from PySide6.QtGui import QColor
+        color=QColor(button.text())
+        picked=QColorDialog.getColor(color, self, '색상 선택', QColorDialog.ColorDialogOption.ShowAlphaChannel)
+        if picked.isValid():
+            self._set_color_button(button, picked)
     def save(self):
-        pid=self.ids[self.provider.currentIndex()]; self.pm.save_provider(pid,self.urlEdit.text().strip(),self.modelEdit.text().strip(),self.keyEdit.text().strip()); self.pm.set_active(pid); self.settings.data['editor'].update({'font_family':self.fontEdit.text().strip() or 'Malgun Gothic','font_size':self.fontSpin.value(),'text_color':self.textColor.text().strip() or '#E8E6E3','bg_color':self.bgColor.text().strip() or '#2B2B2B'}); self.settings.save(); self.accept()
+        pid=self.ids[self.provider.currentIndex()]
+        self.pm.save_provider(pid,self.urlEdit.text().strip(),self.modelEdit.text().strip(),self.keyEdit.text().strip())
+        self.pm.set_active(pid)
+        self.settings.data['editor'].update({
+            'font_family': self.fontEdit.currentFont().family(),
+            'font_size': self.fontSpin.value(),
+            'text_color': self.textColor.text().strip().upper() or '#E8E6E3',
+            'bg_color': self.bgColor.text().strip().upper() or '#2B2B2B'
+        })
+        self.settings.save()
+        self.accept()
     def test(self):
         """연결 테스트: 먼저 테스트하고 성공 시에만 저장한다.
 

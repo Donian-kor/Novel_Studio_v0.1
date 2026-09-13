@@ -5,14 +5,17 @@ class RangesView(BaseView):
     def refresh(self):
         current = self.list.currentRow() if self.list else -1
         self.list.blockSignals(True)
+        self._rows_cache = self.w.db.sections()
         self.list.clear()
-        [self.list.addItem(f"스토리 구간 {r['start_chapter']:03d}~{r['end_chapter']:03d}화 | {r['status']}") for r in self.w.db.sections()]
+        self.list.insertItems(0, [f"스토리 구간 {r['start_chapter']:03d}~{r['end_chapter']:03d}화 | {r['status']}" for r in self._rows_cache])
         if self.list.count(): self.list.setCurrentRow(min(max(current,0), self.list.count()-1))
         else: self.detail.clear()
         self.list.blockSignals(False)
         if self.saveBtn: self.saveBtn.setEnabled(self.selected() is not None)
     def selected(self):
-        rows=self.w.db.sections(); i=self.list.currentRow(); return rows[i] if 0<=i<len(rows) else None
+        cache = getattr(self, '_rows_cache', None)
+        if not cache: return None
+        i=self.list.currentRow(); return cache[i] if 0<=i<len(cache) else None
     def show_selected(self):
         r=self.selected(); self.detail.setPlainText((r['content'] if r else '')+'\n\n[상태 스냅샷]\n'+(r['snapshot'] if r else ''))
         if self.saveBtn: self.saveBtn.setEnabled(r is not None)

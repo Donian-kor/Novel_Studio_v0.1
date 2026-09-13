@@ -10,7 +10,7 @@ class PlanningView(BaseView):
         self.masterEdit=self.ui.findChild(QPlainTextEdit,'masterEdit')
         self.contractEdit=self.ui.findChild(QPlainTextEdit,'contractEdit')
         self.masterPlotEdit=self.ui.findChild(QPlainTextEdit,'masterPlotEdit')
-        self.saveMasterBtn=self.ui.findChild(QPushButton,'saveMasterBtn')
+        self.saveMasterBtn=self.ui.findChild(QPushButton,'saveMasterBtn'); self.diffMasterBtn=self.ui.findChild(QPushButton,'diffMasterBtn')
         self.saveContractBtn=self.ui.findChild(QPushButton,'saveContractBtn')
         self.savePlotBtn=self.ui.findChild(QPushButton,'savePlotBtn')
 

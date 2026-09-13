@@ -47,6 +47,11 @@ class Ui_RangesPage(object):
 
         self.a.addWidget(self.snapshotBtn)
 
+        self.saveBtn = QPushButton(RangesPage)
+        self.saveBtn.setObjectName(u"saveBtn")
+
+        self.a.addWidget(self.saveBtn)
+
 
         self.l.addLayout(self.a)
 
@@ -65,6 +70,7 @@ class Ui_RangesPage(object):
         self.hint.setText(QCoreApplication.translate("RangesPage", u"\uc2a4\ud1a0\ub9ac \uad6c\uac04: \uae34 \uc7a5\ud3b8 \ud50c\ub86f\uc744 \uc791\uc740 \uc791\uc5c5 \uad6c\uac04\uc73c\ub85c \ub098\ub204\uc5b4 \uc21c\uc11c\ub300\ub85c \uc0dd\uc131\ud569\ub2c8\ub2e4.", None))
         self.generateBtn.setText(QCoreApplication.translate("RangesPage", u"AI \uc804\uccb4 \uc2a4\ud1a0\ub9ac \uad6c\uac04 \uc0dd\uc131 / \uc774\uc5b4\ud558\uae30", None))
         self.snapshotBtn.setText(QCoreApplication.translate("RangesPage", u"\uc120\ud0dd \uad6c\uac04 \uae30\uc5b5 \uac31\uc2e0", None))
+        self.saveBtn.setText(QCoreApplication.translate("RangesPage", u"\uc800\uc7a5", None))
         pass
     # retranslateUi
 

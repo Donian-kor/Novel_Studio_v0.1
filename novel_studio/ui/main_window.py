@@ -33,6 +33,8 @@ from novel_studio.plot.parser import parse_chapter_plans, validate_chapter_plans
 from novel_studio.manuscript.chapter_writer import ChapterWriter
 from novel_studio.memory.memory_manager import MemoryManager
 from novel_studio.continuity.checker import ContinuityChecker
+from novel_studio.intelligence.ledger import StateLedger
+from novel_studio.intelligence.diff import MasterDiffService
 from novel_studio.jobs.worker import Job, StreamJob
 from novel_studio.ui.dialogs import AISettingsDialog, ProjectSettingsDialog
 from novel_studio.utils.text import count_chars, strip_ai_marks, check_spelling
@@ -43,7 +45,7 @@ class MainWindow(QMainWindow):
     NAV=['기획','설정 DB','스토리 구간','화별 플롯','원고','기억 / 연속성']
     def __init__(self, project_root):
         super().__init__()
-        self.setWindowTitle('Novel Studio v1.1.4')
+        self.setWindowTitle('Novel Studio v1.3.1')
         self.resize(1700, 1000)
         self.project_root = Path(project_root)
         self.pool = QThreadPool(self)
@@ -51,6 +53,7 @@ class MainWindow(QMainWindow):
         self.current = 1
         self._busy = False
         self._current_job = None
+        self._adjust_attempts = 0
         self._init_services()
         self._init_ui()
         self.chat_window = ChatWindow(self)
@@ -63,7 +66,7 @@ class MainWindow(QMainWindow):
         self._load_all()
         self._build_project_menu()
     def _init_services(self):
-        self.pm=ProjectManager(); self.pm.open(self.project_root); self.app=AppSettings(); self.db=Database(self.project_root/'novel.db'); total=int(self.pm.settings.get('target_chapters',500)); target=int(self.pm.settings.get('chapter_chars',5000)); self.db.ensure_chapters(total,target); self.providers=ProviderManager(self.app); self.ai=AIEngine(self.providers,self.app); self.context=ContextManager(self.db,self.pm,self.app); self.idea_service=IdeaService(self.db,self.ai,self.pm); self.master=MasterPlanner(self.db,self.ai,self.pm); self.plot=PlotManager(self.db,self.ai,self.pm); self.writer=ChapterWriter(self.db,self.ai,self.pm,self.context); self.memory=MemoryManager(self.db,self.ai); self.checker=ContinuityChecker(self.db,self.ai,self.context)
+        self.pm=ProjectManager(); self.pm.open(self.project_root); self.app=AppSettings(); self.db=Database(self.project_root/'novel.db'); total=int(self.pm.settings.get('target_chapters',500)); target=int(self.pm.settings.get('chapter_chars',5000)); self.db.ensure_chapters(total,target); self.providers=ProviderManager(self.app); self.ai=AIEngine(self.providers,self.app); self.context=ContextManager(self.db,self.pm,self.app); self.idea_service=IdeaService(self.db,self.ai,self.pm); self.master=MasterPlanner(self.db,self.ai,self.pm); self.plot=PlotManager(self.db,self.ai,self.pm); self.ledger=StateLedger(self.db); self.master_diff=MasterDiffService(self.db,self.ai); self.writer=ChapterWriter(self.db,self.ai,self.pm,self.context); self.memory=MemoryManager(self.db,self.ai,self.ledger); self.checker=ContinuityChecker(self.db,self.ai,self.context)
     def _init_ui(self):
         self.ui=load_ui('main_window.ui'); self.setCentralWidget(self.ui); self.nav=self.ui.findChild(QListWidget,'navList'); self.stack=self.ui.findChild(QStackedWidget,'pageStack'); self.left=self.ui.findChild(QFrame,'leftPanel'); self.right=self.ui.findChild(QFrame,'rightPanel'); self.left_handle=self.ui.findChild(QFrame,'leftHandle'); self.right_handle=self.ui.findChild(QFrame,'rightHandle'); self.aiStatus=self.ui.findChild(QLabel,'aiStatus')
         self.views=[PlanningView(self),EntitiesView(self),RangesView(self),PlotsView(self),ManuscriptView(self),MemoryView(self)]
@@ -93,11 +96,14 @@ class MainWindow(QMainWindow):
             cbo.setCurrentIndex(idx if idx >= 0 else 0)
             cbo.currentIndexChanged.connect(self._on_auto_save_changed)
             self._setup_auto_save(saved_min)
-        p=self.views[0]; p.masterBtn.clicked.connect(self.generate_master); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
+        p=self.views[0]; p.masterBtn.clicked.connect(self.generate_master); p.diffMasterBtn.clicked.connect(self.preview_master_diff); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
         s = self.views[1]
         # EntitiesView는 __init__ 내부에서 add/save/del/AI 버튼을 자체 배선함
         r=self.views[2]; r.generateBtn.clicked.connect(self.generate_sections); r.snapshotBtn.clicked.connect(self.generate_snapshot); r.saveBtn.clicked.connect(lambda: self._save_view_detail(r, '스토리 구간'))
-        pl=self.views[3]; pl.generateBtn.clicked.connect(self.generate_chapter_plans); pl.allBtn.clicked.connect(self.generate_all_chapter_plans); pl.improveBtn.clicked.connect(self.improve_plot); pl.saveBtn.clicked.connect(lambda: self._save_view_detail(pl, '화별 플롯'))
+        pl=self.views[3]; pl.generateBtn.clicked.connect(self.generate_chapter_plans); pl.allBtn.clicked.connect(self.generate_all_chapter_plans); pl.improveBtn.clicked.connect(self.improve_plot); pl.saveBtn.clicked.connect(lambda: self._save_view_detail(pl, '화별 플롯')); pl.hierBtn.clicked.connect(self.generate_hierarchical_plots)
+        mem=self.views[5]
+        if getattr(mem,'refreshMemoryBtn',None): mem.refreshMemoryBtn.clicked.connect(self._refresh_long_memory)
+        if getattr(mem,'auditBtn',None): mem.auditBtn.clicked.connect(lambda: self._run('장편 정밀 연속성 검사 중...',self.audit_long_form,lambda t: mem.edit.setPlainText(t)))
         m=self.views[4]; m.chapterList.currentRowChanged.connect(lambda row:self.load_chapter(row+1)); m.editor.textChanged.connect(self.update_count); self._wire_manuscript_buttons(m)
     def _save_view_detail(self, view, label):
         try:
@@ -133,11 +139,11 @@ class MainWindow(QMainWindow):
     def refresh_dashboard(self):
         try:
             p = self.pm.settings
-            rows = self.db.chapters()
-            done = sum(1 for r in rows if r['status'] in ('작성완료', '확정', '윤문완료'))
+            stats = self.db.chapter_stats()
+            done = int(stats.get('done') or 0)
             total = int(p.get('target_chapters', 500) or 500)
-            chars = sum(r['char_count'] or 0 for r in rows)
-            active = len([x for x in self.db.foreshadows() if x['status'] != '회수'])
+            chars = int(stats.get('total_chars') or 0)
+            active = self.db.active_foreshadow_count()
             self.dashTitle.setText(f"작품: {p.get('title','')}")
             self.dashProgress.setText(f'{self.current}/{total}화 | 완료 {done}화 ({done/max(1,total)*100:.1f}%)')
             self.dashChars.setText(f'총 {chars:,}자 / 화당 {int(p.get("chapter_chars",5000)):,}자')
@@ -157,6 +163,8 @@ class MainWindow(QMainWindow):
             a2 = QAction('프로젝트 열기', self); a2.triggered.connect(self.open_project); mnu.addAction(a2)
             mnu.addSeparator()
             a3 = QAction('프로젝트 설정', self); a3.triggered.connect(self.edit_project_settings); mnu.addAction(a3)
+            mnu.addSeparator()
+            a4 = QAction('전체 원고 내보내기', self); a4.triggered.connect(self.export_manuscript); mnu.addAction(a4)
             # ---------- 도움말 메뉴 ----------
             hlp = mb.addMenu('도움말')
             h1 = QAction('사용법', self); h1.setShortcut(QKeySequence('F1')); h1.triggered.connect(self.open_help); hlp.addAction(h1)
@@ -180,7 +188,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         QMessageBox.about(
             self, 'Novel Studio 정보',
-            '<b>Novel Studio</b> v1.1.3<br><br>'
+            '<b>Novel Studio</b> v1.3.1<br><br>'
             '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
             '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
 
@@ -238,7 +246,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, '저장 완료', '프로젝트 설정이 저장되었습니다.')
 
     # ---------- 요청 4: 실시간 스트리밍 ----------
-    def _run_stream(self, label, fn, done, append=None):
+    def _run_stream(self, label, fn, done, append=None, replace=True):
         """스트리밍 AI 작업 실행. append는 토큰이 실시간으로 채워질 QPlainTextEdit."""
         if self._busy:
             QMessageBox.warning(self, '작업 중',
@@ -252,6 +260,11 @@ class MainWindow(QMainWindow):
         self._current_job = job
         self._stream_target = None
         if append is not None:
+            if replace:
+                try:
+                    append.clear()
+                except Exception:
+                    pass
             # 원고 에디터로 스트리밍할 때 잦은 textChanged 갱신으로 UI가 느려지지 않도록 차단
             if append is self.views[4].editor:
                 append.blockSignals(True)
@@ -342,6 +355,7 @@ class MainWindow(QMainWindow):
         """공통 정리: 작업 플래그 해제 및 Stop 버튼 비활성화"""
         self._busy = False
         self._current_job = None
+        self._adjust_attempts = 0
         if hasattr(self, 'stopBtn'):
             self.stopBtn.setEnabled(False)
         # 스트리밍 중 블로킹했던 에디터 신호를 복구한다
@@ -384,8 +398,18 @@ class MainWindow(QMainWindow):
     def _load_all(self): self.views[0].refresh(); self.views[1].refresh(); self.views[2].refresh(); self.views[3].refresh(); self._load_chapters(); self.load_chapter(1); self._update_ai_status(); self.refresh_dashboard()
     def _load_chapters(self):
         v=self.views[4]; v.chapterList.clear();
-        for r in self.db.chapters(): v.chapterList.addItem(f"{r['number']:03d}화 | {r['status']} | {r['char_count']:,}자")
+        rows=self.db.chapters()
+        v.chapterList.insertItems(0,[f"{r['number']:03d}화 | {r['status']} | {r['char_count']:,}자" for r in rows])
         self.refresh_dashboard()
+    def export_manuscript(self):
+        """작성된 전체 원고를 exports/ 폴더에 텍스트 하나로 내보낸다."""
+        try:
+            path = self.pm.export_all_chapters()
+            self.statusBar().showMessage(f'원고 내보내기 완료: {path}')
+            QMessageBox.information(self, '내보내기 완료', f'전체 원고를 내보냈습니다.\n{path}')
+        except Exception as e:
+            logger.warning('원고 내보내기 실패: %s', e)
+            QMessageBox.critical(self, '내보내기 실패', f'원고 내보내기 중 오류가 발생했습니다.\n{e}')
     def generate_idea(self):
         def stream(on_token):
             previous = '\n'.join(r['content'] for r in self.db.recent_ideas(10))
@@ -430,7 +454,7 @@ class MainWindow(QMainWindow):
                 self.db.set_meta('idea', t)
             return out
         self._run_stream('AI 마스터 기획 생성 중...', stream,
-                         lambda _: (self.views[0].refresh(), self._run('마스터 기획에서 인물 자동 동기화 중...', self.sync_master_characters, self._after_master_saved)),
+                         lambda _: self._after_master_saved(),
                          append=self.views[0].masterEdit)
     def sync_master_characters(self):
         """마스터 기획에서 남주/여주/조연 인물을 자동 추출해 설정 DB에 upsert한다."""
@@ -456,6 +480,24 @@ class MainWindow(QMainWindow):
             logger.warning('마스터→인물 자동 동기화 실패: %s',e)
             self.views[1].refresh()
             self.statusBar().showMessage('마스터 기획 저장 완료 · 인물 자동 동기화 실패')
+
+    def preview_master_diff(self):
+        old=self.db.get_plan() or ''
+        new=self.views[0].masterEdit.toPlainText()
+        if not old:
+            QMessageBox.information(self,'변경점 검사','기존 마스터 기획이 없습니다. 먼저 저장된 마스터 기획을 만들어 주세요.')
+            return
+        if old == new:
+            QMessageBox.information(self,'변경점 검사','변경된 내용이 없습니다.')
+            return
+        try:
+            payload=self.master_diff.propose(old,new)
+            text=payload.get('summary','변경점 검사 완료')
+            changes=payload.get('changes') or []
+            if changes: text += '\n\n' + '\n'.join(f"- {c.get('type','modify')}: {c.get('path','')}\n  기존: {c.get('before','')}\n  변경: {c.get('after','')}" for c in changes[:30])
+            QMessageBox.information(self,'마스터 변경 제안',text)
+        except Exception as e:
+            QMessageBox.critical(self,'변경점 검사 실패',str(e))
 
     def save_master(self):
         self.db.save_plan(self.views[0].masterEdit.toPlainText())
@@ -574,13 +616,26 @@ class MainWindow(QMainWindow):
         if not self.db.get_meta('master_plot','').strip():
             QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 AI 전체 플롯을 생성하거나 저장하세요.')
             return
-        relevant = [r for r in self.db.sections() if not (r['end_chapter'] < s or r['start_chapter'] > e) and (r['content'] or '').strip()]
+        relevant = [r for r in self.db.sections_overlapping(s, e) if (r['content'] or '').strip()]
         if not relevant:
             QMessageBox.warning(self,'스토리 구간 필요',f'{s}~{e}화에 해당하는 스토리 구간이 없습니다.\n먼저 [스토리 구간]에서 해당 구간을 생성하세요.')
             return
         self._run(f'{s}~{e}화 개별 플롯 생성 중...',
                   lambda:self._generate_plans_worker(s,e),
                   lambda n:(self.views[3].refresh(), self.statusBar().showMessage(f'{n}개 화 플롯 저장 완료')))
+
+    def generate_hierarchical_plots(self):
+        total=int(self.pm.settings.get('target_chapters',500) or 500)
+        if not self.db.get_meta('master_plot','').strip():
+            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 AI 전체 플롯을 생성하거나 저장하세요.')
+            return
+        def work():
+            return self.plot.generate_hierarchical_plans(25)
+        def done(results):
+            made=sum(x[2] for x in results)
+            self.views[3].refresh()
+            QMessageBox.information(self,'구간별 플롯 생성 완료',f'{len(results)}개 구간에서 {made}개 화 플롯을 처리했습니다.')
+        self._run(f'1~{total}화 구간별 플롯 생성 중...',work,done)
 
     def generate_all_chapter_plans(self):
         self.views[3].start.setValue(1)
@@ -592,7 +647,7 @@ class MainWindow(QMainWindow):
         self._run('선택 플롯 개선 중...',lambda:self.ai.generate('기존 설정과 화별 형식을 유지하며 다음 플롯을 개선하라.\n'+p['content'],temperature=.42,max_tokens=9000),lambda t:self.db.save_chapter_plan(p['chapter_number'],p['title'],t,'초안') or self.views[3].refresh())
     def load_chapter(self,n):
         self.current=int(n); v=self.views[4]; v.editor.blockSignals(True); v.editor.setPlainText(self.pm.load_chapter(self.current)); v.editor.blockSignals(False); r=self.db.chapter(self.current); v.titleEdit.setText(r['title'] if r else f'{self.current}화'); self.update_count(); self._update_state();
-        if hasattr(self,'chat_window'): self.chat_window.refresh(self.db.chat_messages())
+        if hasattr(self,'chat_window'): self.chat_window.refresh(self.db.chat_messages(limit=200))
     def update_count(self):
         t=self.views[4].editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.views[4].countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
     def save_current(self):
@@ -746,7 +801,8 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def write_current(self):
-        """요청 2·4: 기획 확인 후 실시간 스트리밍으로 집필한다."""
+        """기획 확인 후 실시간 스트리밍으로 집필한다."""
+        self._adjust_attempts = 0
         if not self._check_write_prereq():
             return
 
@@ -766,12 +822,40 @@ class MainWindow(QMainWindow):
             return
         target=int(self.pm.settings['chapter_chars']); tol=int(self.pm.settings['tolerance']); n=count_chars(t)
         if not target-tol<=n<=target+tol:
-            self._run('목표 글자 수 보정 중...',lambda:self.writer.adjust(t,target,tol),self._after_write); return
-        self.views[4].editor.setPlainText(t); self.update_count();
-        def memory_job(): return self.memory.update(self.current,t),self.checker.check(self.current,t)
+            if self._adjust_attempts < 3:
+                self._adjust_attempts += 1
+                attempt=self._adjust_attempts
+                self._run(f'목표 글자 수 보정 중... ({attempt}/3)',lambda:self.writer.adjust(t,target,tol),self._after_write)
+                return
+            self.views[4].editor.setPlainText(t); self.update_count()
+            QMessageBox.warning(self,'글자 수 보정 중단',f'3회 보정 후에도 목표 범위를 벗어났습니다. 현재 {n}자입니다. 원고를 그대로 유지합니다.')
+        else:
+            self.views[4].editor.setPlainText(t); self.update_count()
+        def memory_job():
+            prev = self.db.latest_chapter_state(self.current - 1)
+            previous_state = (prev['state'] if prev else '') if prev else ''
+            return self.memory.update(self.current,t,previous_state),self.checker.check(self.current,t)
         self._run('기억/연속성 자동 갱신 중...',memory_job,lambda result:self.views[5].edit.setPlainText(result[0][0]+'\n\n[연속성]\n'+result[1]))
     def revise_current(self): self._run('AI 윤문 중...',lambda:self.ai.generate('사건과 설정을 변경하지 말고 다음 원고를 자연스럽게 윤문하라. 본문만 출력.\n'+self.views[4].editor.toPlainText(),temperature=.38,max_tokens=14000),self._apply_text)
     def _apply_text(self,t): self.views[4].editor.setPlainText(t); self.update_count()
+    def _refresh_long_memory(self):
+        path=self.project_root/'chapters'/f'{self.current:03d}.txt'
+        if not path.exists(): QMessageBox.information(self,'장기 기억','현재 화 원고가 없습니다.'); return
+        try:
+            sm,st=self.memory.update(self.current,path.read_text(encoding='utf-8'))
+            self.views[5].edit.setPlainText(sm+'\n\n[상태]\n'+st)
+        except Exception as e: QMessageBox.critical(self,'장기 기억 오류',str(e))
+
+    def audit_long_form(self):
+        findings=[]
+        for s0,e0 in self.plot.ranges_by_size(50):
+            secs=self.db.sections_overlapping(s0,e0)
+            source='\n'.join(r['content'] for r in secs)[:22000]
+            out=self.ai.generate(f'{s0}~{e0}화 설정/복선/시간축 연속성 문제만 검사하라. 추측 금지.\n{source}',temperature=.1,max_tokens=5000)
+            self.db.add_continuity(e0,'정밀','구간',out)
+            findings.append(f'[{s0}~{e0}]\n{out}')
+        return '\n\n'.join(findings)
+
     def check_current(self): self._run('AI 연속성 검사 중...',lambda:self.checker.check(self.current,self.views[4].editor.toPlainText()),lambda t:self.views[5].edit.setPlainText(t))
     def spellcheck_current(self):
         """요청 7-1: 맞춤법 검사. py-hanspell이 있으면 사용, 없으면 AI로 대체한다."""
@@ -816,24 +900,27 @@ class MainWindow(QMainWindow):
     def search_chat(self):
         msg=self.chat_window.input.toPlainText().strip(); hits=self.db.search(msg,30); self.chat_window.log.appendPlainText('\n[DB 검색]\n'+('\n'.join(f'{label}: {row}' for label,row in hits) if hits else '일치하는 DB 기록이 없습니다.')+'\n')
     def send_chat(self):
-        msg=self.chat_window.input.toPlainText().strip();
+        msg=self.chat_window.input.toPlainText().strip()
         if not msg:return
-        self.chat_window.input.clear(); self.db.add_chat('user',msg,self.current); hits=self.db.search(msg,40); evidence='\n'.join(f'[{l}] {r}' for l,r in hits); ctx=self.context.build(self.current,msg)+'\n\n[DB SEARCH EVIDENCE]\n'+evidence
+        self.chat_window.input.clear()
+        self.db.add_chat('user',msg,self.current)
+        history=list(reversed(self.db.chat_messages(limit=20)))
+        ctx=self.context.build(self.current,msg)
+        messages=[{'role':'system','content':chat_system(ctx)}]
+        for row in history[:-1]:
+            role=row['role'] if row['role'] in ('user','assistant') else 'user'
+            messages.append({'role':role,'content':row['content']})
+        messages.append({'role':'user','content':msg})
         def stream(on_token):
             on_token('\nAI: ')
-            collected = []
-            for t in self.ai.generate_stream([{'role':'system','content':chat_system(ctx)},
-                                              {'role':'user','content':msg}],
-                                             temperature=.55, max_tokens=10000):
-                if self._current_job is not None and self._current_job.is_cancelled():
-                    break
-                on_token(t)
-                collected.append(t)
+            collected=[]
+            for t in self.ai.generate_stream(messages,temperature=.55,max_tokens=10000):
+                if self._current_job is not None and self._current_job.is_cancelled(): break
+                on_token(t); collected.append(t)
             return ''.join(collected)
-        self._run_stream('AI 작품 비서 응답 중...', stream,
-                         lambda t:(self.db.add_chat('assistant',t,self.current),
-                                   self.chat_window.refresh(self.db.chat_messages())),
-                         append=self.chat_window.log)
+        self._run_stream('AI 작품 비서 응답 중...',stream,
+                         lambda t:(self.db.add_chat('assistant',t,self.current),self.chat_window.refresh(self.db.chat_messages(limit=200))),
+                         append=self.chat_window.log,replace=False)
     def open_ai_chat(self): self.chat_window.show(); self.chat_window.raise_(); self.chat_window.activateWindow()
     def open_settings(self):
         d=AISettingsDialog(self.providers,self.app,self)

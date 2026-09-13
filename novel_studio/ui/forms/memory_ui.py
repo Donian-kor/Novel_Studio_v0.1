@@ -15,8 +15,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QLabel, QPlainTextEdit, QSizePolicy,
-    QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QPlainTextEdit,
+    QPushButton, QSizePolicy, QVBoxLayout, QWidget)
 
 class Ui_MemoryPage(object):
     def setupUi(self, MemoryPage):
@@ -28,6 +28,21 @@ class Ui_MemoryPage(object):
         self.hint.setObjectName(u"hint")
 
         self.l.addWidget(self.hint)
+
+        self.toolbar = QHBoxLayout()
+        self.toolbar.setObjectName(u"toolbar")
+        self.refreshMemoryBtn = QPushButton(MemoryPage)
+        self.refreshMemoryBtn.setObjectName(u"refreshMemoryBtn")
+
+        self.toolbar.addWidget(self.refreshMemoryBtn)
+
+        self.auditBtn = QPushButton(MemoryPage)
+        self.auditBtn.setObjectName(u"auditBtn")
+
+        self.toolbar.addWidget(self.auditBtn)
+
+
+        self.l.addLayout(self.toolbar)
 
         self.edit = QPlainTextEdit(MemoryPage)
         self.edit.setObjectName(u"edit")
@@ -42,6 +57,8 @@ class Ui_MemoryPage(object):
 
     def retranslateUi(self, MemoryPage):
         self.hint.setText(QCoreApplication.translate("MemoryPage", u"\ud654\ubcc4 \uae30\uc5b5\uacfc \uc5f0\uc18d\uc131 \uac80\uc0ac \uacb0\uacfc", None))
+        self.refreshMemoryBtn.setText(QCoreApplication.translate("MemoryPage", u"\uc7a5\uae30 \uae30\uc5b5 \uc0c8\ub85c\uace0\uce68", None))
+        self.auditBtn.setText(QCoreApplication.translate("MemoryPage", u"\uc7a5\ud3b8 \uc815\ubc00 \uc5f0\uc18d\uc131 \uac80\uc0ac", None))
         pass
     # retranslateUi
 

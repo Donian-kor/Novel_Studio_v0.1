@@ -5,7 +5,7 @@ class PlotsView(BaseView):
     def __init__(self,w):
         super().__init__(w); self.mount('plots.ui'); self.w=w
         self.start=self.ui.findChild(QSpinBox,'start'); self.end=self.ui.findChild(QSpinBox,'end'); self.list=self.ui.findChild(QListWidget,'list'); self.detail=self.ui.findChild(QPlainTextEdit,'detail')
-        self.generateBtn=self.ui.findChild(QPushButton,'generateBtn'); self.allBtn=self.ui.findChild(QPushButton,'allBtn'); self.improveBtn=self.ui.findChild(QPushButton,'improveBtn'); self.saveBtn=self.ui.findChild(QPushButton,'saveBtn')
+        self.generateBtn=self.ui.findChild(QPushButton,'generateBtn'); self.allBtn=self.ui.findChild(QPushButton,'allBtn'); self.improveBtn=self.ui.findChild(QPushButton,'improveBtn'); self.hierBtn=self.ui.findChild(QPushButton,'hierBtn'); self.saveBtn=self.ui.findChild(QPushButton,'saveBtn')
         self.splitter=self.ui.findChild(QSplitter,'plotsSplitter')
         if self.splitter:
             self.splitter.setChildrenCollapsible(False); self.splitter.setHandleWidth(9)
@@ -18,13 +18,17 @@ class PlotsView(BaseView):
     def refresh(self):
         current = self.list.currentRow() if self.list else -1
         self.list.blockSignals(True)
-        self.list.clear(); [self.list.addItem(f"{p['chapter_number']:03d}화 {p['title']} | {p['status']}") for p in self.w.db.chapter_plans()]
+        self._rows_cache = self.w.db.chapter_plans()
+        self.list.clear()
+        self.list.insertItems(0, [f"{p['chapter_number']:03d}화 {p['title']} | {p['status']}" for p in self._rows_cache])
         if self.list.count(): self.list.setCurrentRow(min(max(current,0), self.list.count()-1))
         else: self.detail.clear()
         self.list.blockSignals(False)
         if self.saveBtn: self.saveBtn.setEnabled(self.selected() is not None)
     def selected(self):
-        rows=self.w.db.chapter_plans(); i=self.list.currentRow(); return rows[i] if 0<=i<len(rows) else None
+        cache = getattr(self, '_rows_cache', None)
+        if not cache: return None
+        i=self.list.currentRow(); return cache[i] if 0<=i<len(cache) else None
     def show_selected(self):
         p=self.selected(); self.detail.setPlainText(p['content'] if p else '')
         if self.saveBtn: self.saveBtn.setEnabled(p is not None)

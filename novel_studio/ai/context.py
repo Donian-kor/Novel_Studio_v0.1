@@ -1,26 +1,36 @@
+from novel_studio.intelligence.retrieval import RetrievalEngine
+
 class ContextManager:
-    def __init__(self,db,project,settings): self.db,self.project,self.settings=db,project,settings
+    def __init__(self,db,project,settings): self.db,self.project,self.settings=db,project,settings; self.retrieval=RetrievalEngine(db)
     def build(self,chapter=None,extra=''):
-        b=[]; c=self.db.get_contract()
+        b=[]; c=self.db.get_contract(); plan=self.db.get_plan(); mp=self.db.get_meta('master_plot','')
         if c and c['content']: b.append('[PLAN CONTRACT]\n'+c['content'][:8000])
-        if self.db.get_plan(): b.append('[MASTER PLAN]\n'+self.db.get_plan()[:9000])
-        if self.db.get_meta('master_plot',''): b.append('[MASTER PLOT]\n'+self.db.get_meta('master_plot')[:9000])
+        if plan: b.append('[MASTER PLAN]\n'+plan[:9000])
+        if mp: b.append('[MASTER PLOT]\n'+mp[:9000])
         if chapter:
-            p=self.db.chapter_plan(chapter)
+            r=self.retrieval.retrieve(chapter,extra); p=r['plan']; sec=r['section']
             if p:b.append(f'[CHAPTER PLAN {chapter}]\n'+p['content'][:8000])
-            sec=next((s for s in self.db.sections() if s['start_chapter']<=chapter<=s['end_chapter']),None)
-            if sec:b.append('[CURRENT STORY SECTION]\n'+sec['content'][:7000]+'\n[SNAPSHOT]\n'+(sec['snapshot'] or '')[:5000])
-            for n in range(max(1,chapter-int(self.settings.data['ai']['memory_recent_chapters'])),chapter):
-                s=self.db.summary(n)
-                if s:b.append(f'[SUMMARY {n}]\n'+s['summary'][:3000])
+            if sec:b.append('[CURRENT STORY SECTION]\n'+sec['content'][:6000]+'\n[SECTION SNAPSHOT]\n'+(sec['snapshot'] or '')[:4500])
+            for key,label,lim in [('section_memory','SECTION MEMORY',6500),('arc_memory','ARC MEMORY',7000)]:
+                row=r[key]
+                if row:b.append(f'[{label}]\n'+(row['content'] or '')[:lim])
+            recent=int(self.settings.data['ai'].get('memory_recent_chapters',5))
+            for row in r['recent_summaries'][:recent]:b.append(f"[SUMMARY {row['chapter_number']}]\n"+(row['summary'] or '')[:3000])
+            prev=r['previous_state']
+            if prev:b.append(f"[LATEST CONFIRMED STATE {prev['chapter_number']}]\n"+(prev['state'] or '')[:9000])
             if chapter>1:
-                prev=self.project.load_chapter(chapter-1); tail=int(self.settings.data['ai']['previous_tail_chars'])
-                if prev:b.append('[PREVIOUS TAIL]\n'+prev[-tail:])
-        chars=self.db.characters()
-        if chars:b.append('[CHARACTERS]\n'+'\n'.join(f"- {x['name']}: {x['role']} / {x['personality']} / 목표={x['goal']}" for x in chars[:50]))
-        worlds=self.db.world_entities()
-        if worlds:b.append('[WORLD]\n'+'\n'.join(f"- {x['name']} ({x['category']}): {x['description'][:400]}" for x in worlds[:60]))
-        fs=[x for x in self.db.foreshadows() if x['status']!='회수']
-        if fs:b.append('[ACTIVE FORESHADOWING]\n'+'\n'.join(f"- {x['code']} {x['title']} / 회수:{x['reveal_chapter']}" for x in fs[:80]))
+                prev_text=self.project.load_chapter(chapter-1); tail=int(self.settings.data['ai']['previous_tail_chars'])
+                if prev_text:b.append('[PREVIOUS TAIL]\n'+prev_text[-tail:])
+            if r['timeline']:b.append('[LOCAL TIMELINE]\n'+'\n'.join(f"- {x['chapter_number']}화 {x['title']}: {x['description']}" for x in r['timeline'][:30]))
+            if r['events']:b.append('[LOCAL EVENTS]\n'+'\n'.join(f"- {x['start_chapter']}~{x['end_chapter'] or x['start_chapter']}화 {x['title']}: {x['description']}" for x in r['events'][:20]))
+            if r.get('entity_states'):
+                b.append('[ENTITY STATE LEDGER]\n'+'\n'.join(f"- {x['kind']}:{x['entity_key']} / {x['chapter_number']}화 / {(x['state'] or '')[:1600]}" for x in r['entity_states'][:40]))
+            if r.get('search'):
+                b.append('[DB SEARCH EVIDENCE]\n'+'\n'.join(f"- {label}: {row.get('content','')}" for label,row in r['search']))
+            chars,worlds,fs=r['characters'],r['world'],r['foreshadowing']
+        else: chars=self.db.characters(limit=40); worlds=self.db.world_entities(limit=40); fs=self.db.foreshadows(limit=60,active_only=True)
+        if chars:b.append('[RELEVANT CHARACTERS]\n'+'\n'.join(f"- {x['name']}: {x['role']} / {x['personality']} / 목표={x['goal']}" for x in chars))
+        if worlds:b.append('[RELEVANT WORLD]\n'+'\n'.join(f"- {x['name']} ({x['category']}): {(x['description'] or '')[:400]}" for x in worlds))
+        if fs:b.append('[RELEVANT FORESHADOWING]\n'+'\n'.join(f"- {x['code']} {x['title']} / 상태={x['status']} / 회수={x['reveal_chapter']}" for x in fs))
         if extra:b.append('[USER REQUEST]\n'+extra)
         return '\n\n'.join(b)

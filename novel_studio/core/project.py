@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-import json
+import json, os, shutil
 
 @dataclass
 class ProjectPaths:
@@ -64,4 +64,35 @@ class ProjectManager:
         return path.read_text(encoding="utf-8") if path.exists() else ""
 
     def save_chapter(self, number, text):
-        self.chapter_path(number).write_text(text, encoding="utf-8")
+        path=self.chapter_path(number)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp=self.paths.temp / f"chapter_{int(number):03d}.tmp"
+        backup=self.paths.backups / f"{int(number):03d}.txt.bak"
+        if path.exists():
+            try: shutil.copy2(path, backup)
+            except OSError: pass
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+        return path
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+        return path
+
+    def export_all_chapters(self):
+        """작성된 전체 원고를 exports/ 폴더에 단일 텍스트 파일로 병합 저장."""
+        if not self.paths:
+            raise RuntimeError("프로젝트가 없습니다.")
+        from datetime import datetime
+        total = int(self.settings.get("target_chapters", 0))
+        parts = []
+        for n in range(1, total + 1):
+            text = self.load_chapter(n)
+            if text.strip():
+                parts.append(f"{'=' * 24}\n제{n}화\n{'=' * 24}\n{text.strip()}")
+        if not parts:
+            raise RuntimeError("내보낼 원고가 없습니다.")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        title = (self.settings.get("title") or "novel").strip().replace("/", "_").replace("\\", "_")
+        out = self.paths.exports / f"{title}_전체원고_{stamp}.txt"
+        out.write_text("\n\n".join(parts), encoding="utf-8")
+        return out

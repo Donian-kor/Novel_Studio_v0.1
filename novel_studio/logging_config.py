@@ -23,7 +23,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     sh.setFormatter(fmt)
     root.addHandler(sh)
     try:
-        log_dir = Path(__file__).resolve().parents[2] / 'logs'
+        log_dir = Path(__file__).resolve().parents[1] / 'logs'
         log_dir.mkdir(parents=True, exist_ok=True)
         fh = logging.FileHandler(log_dir / 'app.log', encoding='utf-8')
         fh.setFormatter(fmt)

@@ -39,7 +39,7 @@ class EntitiesView(BaseView):
         db=self.w.db; cat=self.catCombo.currentText()
         if cat=='인물': return [('char',r['name'],r) for r in db.characters()]
         if cat in ('세력','장소'):
-            return [('world',r['name'],r) for r in db.world_entities() if (r['category'] or '')==cat]
+            return [('world',r['name'],r) for r in db.world_entities(category=cat)]
         if cat=='복선': return [('fore',r['code'] or r['title'],r) for r in db.foreshadows()]
         if cat=='핵심 사건': return [('major',r['title'],r) for r in db.major_events()]
         return [('time',f"{r['chapter_number'] or '-'}화 {r['title']}",r) for r in db.timeline()]

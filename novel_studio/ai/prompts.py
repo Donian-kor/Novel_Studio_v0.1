@@ -48,6 +48,24 @@ CONTRACT:{contract}
 def write(ctx,ch,target,tol): return f"제{ch}화 본문을 작성하라. 목표 {target}자, 허용 {target-tol}~{target+tol}자. 대사는 위아래 한 줄씩 띄운다. 본문만 출력한다.\n{ctx}"
 def summary(ch,text): return f"제{ch}화 원고를 다음 화 집필용 기억으로 압축하라. [핵심 사건][인물 상태][경지/능력][위치][시간][소지품][관계][신규 복선][진행/회수 복선][미해결 사건]\n{text}"
 def state(ch,text): return f"제{ch}화 원고에서 실제로 변한 상태만 추출하라. 추측 금지. [주인공 상태][인물 상태 변화][경지][위치][시간][소지품][관계][신규 복선][진행 복선][회수 복선][미해결 사건]\n{text}"
+def section_memory(start,end,summaries,states):
+    return f"""{start}~{end}화 스토리 구간의 장기 기억을 압축하라.
+원고 전체를 재작성하지 말고 다음 구간 상태만 남긴다.
+[구간 목표][핵심 사건][인물 상태 변화][경지/능력 변화][세력 변화][장소/시간 변화][복선 진행/회수][미해결 문제][다음 구간 연결점]
+사실에 없는 내용은 추측하지 않는다.
+[화별 요약]
+{summaries[:14000]}
+[화별 상태]
+{states[:14000]}
+"""
+
+def arc_memory(start,end,section_memories):
+    return f"""{start}~{end}화 아크의 장기 기억을 압축하라. 아래 구간 기억만 근거로 작성한다.
+[아크 목표][핵심 전개][주인공/주요 인물 변화][세력/세계 변화][중요 복선][회수된 복선][남은 미해결][아크 결말 상태][다음 아크 연결]
+추측 금지. 작품 상태를 대표하는 변경점 중심으로 짧고 정확하게 작성한다.
+[구간 기억]
+{section_memories[:18000]}
+"""
 def chat_system(ctx): return f"당신은 작품 전용 AI 비서다. 확정된 작품 데이터와 검색 근거를 우선한다. 자료에 없으면 확인 불가라고 답한다.\n{ctx}"
 def continuity(ch,text,ctx): return f"제{ch}화 원고를 아래 확정 설정/기억과 대조하여 연속성 오류만 보고하라. 추측 금지, 근거 없는 지적 금지. [모순/오류][누락 확인 필요][특이사항 없음 여부]\n[참고 자료]\n{ctx}\n\n[검사 대상 원고]\n{text}"
 def entity_extra(kind, name, context_text):
