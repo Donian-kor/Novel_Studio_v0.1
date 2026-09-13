@@ -2,19 +2,106 @@
 <ui version="4.0">
  <class>EntitiesPage</class>
  <widget class="QWidget" name="EntitiesPage">
+  <property name="styleSheet"><string>QLabel { color: #d0d0d0; font-size: 12px; } QLineEdit, QTextEdit, QSpinBox { background: #1e1e1e; color: #e0e0e0; border: 1px solid #3a3a3a; border-radius: 3px; padding: 4px; } QSplitter::handle { background: #6a6a6a; } QSplitter::handle:hover { background: #9a9a9a; }</string></property>
   <layout class="QHBoxLayout" name="l">
-   <item><widget class="QSplitter" name="entitiesSplitter">
-     <property name="orientation"><enum>Qt::Horizontal</enum></property>
-     <widget class="QWidget" name="entitiesLeft"><layout class="QVBoxLayout" name="left">
-       <item><widget class="QLabel" name="catLbl"><property name="text"><string>분류</string></property></widget></item>
-       <item><widget class="QComboBox" name="catCombo"/></item>
-       <item><widget class="QListWidget" name="entryList"/></item>
-       <item><layout class="QHBoxLayout" name="addRow"><item><widget class="QPushButton" name="addBtn"><property name="text"><string>+ 추가</string></property></widget></item><item><widget class="QPushButton" name="delBtn"><property name="text"><string>삭제</string></property></widget></item></layout></item>
-     </layout></widget>
-     <widget class="QWidget" name="entitiesRight"><layout class="QVBoxLayout" name="right">
-       <item><layout class="QHBoxLayout" name="head"><item><widget class="QLabel" name="nameLbl"><property name="text"><string>이름/코드</string></property></widget></item><item><widget class="QLineEdit" name="nameEdit"/></item><item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI로 생성/보완</string></property></widget></item><item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item></layout></item>
-       <item><widget class="QPlainTextEdit" name="detail"/></item>
-     </layout></widget>
+   <item><widget class="QSplitter" name="entitiesSplitter"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="childrenCollapsible"><bool>false</bool></property><property name="handleWidth"><number>9</number></property>
+    <widget class="QWidget" name="entitiesLeft"><layout class="QVBoxLayout" name="left">
+     <item><widget class="QLabel" name="catLbl"><property name="text"><string>분류</string></property></widget></item>
+     <item><widget class="QComboBox" name="catCombo"/></item>
+     <item><widget class="QListWidget" name="entryList"/></item>
+     <item><layout class="QHBoxLayout" name="addRow"><item><widget class="QPushButton" name="addBtn"><property name="text"><string>+ 추가</string></property></widget></item><item><widget class="QPushButton" name="delBtn"><property name="text"><string>삭제</string></property></widget></item></layout></item>
+    </layout></widget>
+    <widget class="QWidget" name="entitiesRight"><layout class="QVBoxLayout" name="right">
+     <item><layout class="QHBoxLayout" name="head"><item><widget class="QLabel" name="nameLbl"><property name="text"><string>이름/코드</string></property></widget></item><item><widget class="QLineEdit" name="nameEdit"/></item><item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI로 생성/보완</string></property></widget></item><item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item></layout></item>
+     <item><widget class="QStackedWidget" name="formStack"><property name="currentIndex"><number>0</number></property>
+      <widget class="QWidget" name="characterPage"><layout class="QFormLayout" name="characterForm"><property name="labelPosition"><enum>QFormLayout::LabelsAbove</enum></property>
+       <item row="0" column="0"><widget class="QLabel" name="characterNameLabel"><property name="text"><string>이름</string></property></widget></item>
+       <item row="0" column="1"><widget class="QLineEdit" name="characterNameEdit"/></item>
+       <item row="1" column="0"><widget class="QLabel" name="characterRoleLabel"><property name="text"><string>역할</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLineEdit" name="characterRoleEdit"/></item>
+       <item row="2" column="0"><widget class="QLabel" name="characterProfileLabel"><property name="text"><string>프로필</string></property></widget></item>
+       <item row="2" column="1" colspan="2"><widget class="QTextEdit" name="characterProfileEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="characterPersonalityLabel"><property name="text"><string>성격</string></property></widget></item>
+       <item row="3" column="1" colspan="2"><widget class="QTextEdit" name="characterPersonalityEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="4" column="0"><widget class="QLabel" name="characterSpeechStyleLabel"><property name="text"><string>말투</string></property></widget></item>
+       <item row="4" column="1" colspan="2"><widget class="QTextEdit" name="characterSpeechStyleEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="5" column="0"><widget class="QLabel" name="characterGoalLabel"><property name="text"><string>목표</string></property></widget></item>
+       <item row="5" column="1" colspan="2"><widget class="QTextEdit" name="characterGoalEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="6" column="0"><widget class="QLabel" name="characterSecretLabel"><property name="text"><string>비밀</string></property></widget></item>
+       <item row="6" column="1" colspan="2"><widget class="QTextEdit" name="characterSecretEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="7" column="0"><widget class="QLabel" name="characterArcLabel"><property name="text"><string>아크</string></property></widget></item>
+       <item row="7" column="1" colspan="2"><widget class="QTextEdit" name="characterArcEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+      </layout></widget>
+      <widget class="QWidget" name="factionPage"><layout class="QFormLayout" name="factionForm"><property name="labelPosition"><enum>QFormLayout::LabelsAbove</enum></property>
+       <item row="0" column="0"><widget class="QLabel" name="factionNameLabel"><property name="text"><string>이름</string></property></widget></item>
+       <item row="0" column="1"><widget class="QLineEdit" name="factionNameEdit"/></item>
+       <item row="1" column="0"><widget class="QLabel" name="factionCategoryLabel"><property name="text"><string>분류</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLineEdit" name="factionCategoryEdit"><property name="readOnly"><bool>true</bool></property><property name="styleSheet"><string>background: #2a2a2a; color: #888;</string></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel" name="factionDescriptionLabel"><property name="text"><string>설명</string></property></widget></item>
+       <item row="2" column="1" colspan="2"><widget class="QTextEdit" name="factionDescriptionEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="factionRulesLabel"><property name="text"><string>규칙</string></property></widget></item>
+       <item row="3" column="1" colspan="2"><widget class="QTextEdit" name="factionRulesEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+      </layout></widget>
+      <widget class="QWidget" name="locationPage"><layout class="QFormLayout" name="locationForm"><property name="labelPosition"><enum>QFormLayout::LabelsAbove</enum></property>
+       <item row="0" column="0"><widget class="QLabel" name="locationNameLabel"><property name="text"><string>이름</string></property></widget></item>
+       <item row="0" column="1"><widget class="QLineEdit" name="locationNameEdit"/></item>
+       <item row="1" column="0"><widget class="QLabel" name="locationCategoryLabel"><property name="text"><string>분류</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLineEdit" name="locationCategoryEdit"><property name="readOnly"><bool>true</bool></property><property name="styleSheet"><string>background: #2a2a2a; color: #888;</string></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel" name="locationDescriptionLabel"><property name="text"><string>설명</string></property></widget></item>
+       <item row="2" column="1" colspan="2"><widget class="QTextEdit" name="locationDescriptionEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="locationRulesLabel"><property name="text"><string>규칙/특징</string></property></widget></item>
+       <item row="3" column="1" colspan="2"><widget class="QTextEdit" name="locationRulesEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+      </layout></widget>
+      <widget class="QWidget" name="foreshadowPage"><layout class="QFormLayout" name="foreshadowForm"><property name="labelPosition"><enum>QFormLayout::LabelsAbove</enum></property>
+       <item row="0" column="0"><widget class="QLabel" name="foreshadowCodeLabel"><property name="text"><string>코드</string></property></widget></item>
+       <item row="0" column="1"><widget class="QLineEdit" name="foreshadowCodeEdit"/></item>
+       <item row="1" column="0"><widget class="QLabel" name="foreshadowTitleLabel"><property name="text"><string>제목</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLineEdit" name="foreshadowTitleEdit"/></item>
+       <item row="2" column="0"><widget class="QLabel" name="foreshadowFirstChapterLabel"><property name="text"><string>첫 등장 화수</string></property></widget></item>
+       <item row="2" column="1"><widget class="QSpinBox" name="foreshadowFirstChapterSpin"><property name="minimum"><number>0</number></property><property name="maximum"><number>9999</number></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="foreshadowRevealChapterLabel"><property name="text"><string>공개 화수</string></property></widget></item>
+       <item row="3" column="1"><widget class="QSpinBox" name="foreshadowRevealChapterSpin"><property name="minimum"><number>0</number></property><property name="maximum"><number>9999</number></property></widget></item>
+       <item row="4" column="0"><widget class="QLabel" name="foreshadowStatusLabel"><property name="text"><string>상태</string></property></widget></item>
+       <item row="4" column="1"><widget class="QLineEdit" name="foreshadowStatusEdit"/></item>
+       <item row="5" column="0"><widget class="QLabel" name="foreshadowPublicInfoLabel"><property name="text"><string>공개된 정보</string></property></widget></item>
+       <item row="5" column="1" colspan="2"><widget class="QTextEdit" name="foreshadowPublicInfoEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="6" column="0"><widget class="QLabel" name="foreshadowAuthorTruthLabel"><property name="text"><string>진상(작가 진실)</string></property></widget></item>
+       <item row="6" column="1" colspan="2"><widget class="QTextEdit" name="foreshadowAuthorTruthEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="7" column="0"><widget class="QLabel" name="foreshadowRelatedCharactersLabel"><property name="text"><string>관련 인물</string></property></widget></item>
+       <item row="7" column="1"><widget class="QLineEdit" name="foreshadowRelatedCharactersEdit"/></item>
+       <item row="8" column="0"><widget class="QLabel" name="foreshadowNotesLabel"><property name="text"><string>메모</string></property></widget></item>
+       <item row="8" column="1" colspan="2"><widget class="QTextEdit" name="foreshadowNotesEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+      </layout></widget>
+      <widget class="QWidget" name="majorEventPage"><layout class="QFormLayout" name="majorEventForm"><property name="labelPosition"><enum>QFormLayout::LabelsAbove</enum></property>
+       <item row="0" column="0"><widget class="QLabel" name="majorTitleLabel"><property name="text"><string>제목</string></property></widget></item>
+       <item row="0" column="1"><widget class="QLineEdit" name="majorTitleEdit"/></item>
+       <item row="1" column="0"><widget class="QLabel" name="majorStartChapterLabel"><property name="text"><string>시작 화수</string></property></widget></item>
+       <item row="1" column="1"><widget class="QSpinBox" name="majorStartChapterSpin"><property name="minimum"><number>0</number></property><property name="maximum"><number>9999</number></property></widget></item>
+       <item row="2" column="0"><widget class="QLabel" name="majorEndChapterLabel"><property name="text"><string>종료 화수</string></property></widget></item>
+       <item row="2" column="1"><widget class="QSpinBox" name="majorEndChapterSpin"><property name="minimum"><number>0</number></property><property name="maximum"><number>9999</number></property></widget></item>
+       <item row="3" column="0"><widget class="QLabel" name="majorDescriptionLabel"><property name="text"><string>설명</string></property></widget></item>
+       <item row="3" column="1" colspan="2"><widget class="QTextEdit" name="majorDescriptionEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="4" column="0"><widget class="QLabel" name="majorConsequenceLabel"><property name="text"><string>결과/파장</string></property></widget></item>
+       <item row="4" column="1" colspan="2"><widget class="QTextEdit" name="majorConsequenceEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="5" column="0"><widget class="QLabel" name="majorStatusLabel"><property name="text"><string>상태</string></property></widget></item>
+       <item row="5" column="1"><widget class="QLineEdit" name="majorStatusEdit"/></item>
+      </layout></widget>
+      <widget class="QWidget" name="timelinePage"><layout class="QFormLayout" name="timelineForm"><property name="labelPosition"><enum>QFormLayout::LabelsAbove</enum></property>
+       <item row="0" column="0"><widget class="QLabel" name="timelineChapterLabel"><property name="text"><string>화수</string></property></widget></item>
+       <item row="0" column="1"><widget class="QSpinBox" name="timelineChapterSpin"><property name="minimum"><number>0</number></property><property name="maximum"><number>9999</number></property></widget></item>
+       <item row="1" column="0"><widget class="QLabel" name="timelineStoryDateLabel"><property name="text"><string>이야기 속 날짜</string></property></widget></item>
+       <item row="1" column="1"><widget class="QLineEdit" name="timelineStoryDateEdit"/></item>
+       <item row="2" column="0"><widget class="QLabel" name="timelineTitleLabel"><property name="text"><string>제목</string></property></widget></item>
+       <item row="2" column="1"><widget class="QLineEdit" name="timelineTitleEdit"/></item>
+       <item row="3" column="0"><widget class="QLabel" name="timelineDescriptionLabel"><property name="text"><string>설명</string></property></widget></item>
+       <item row="3" column="1" colspan="2"><widget class="QTextEdit" name="timelineDescriptionEdit"><property name="maximumHeight"><number>120</number></property></widget></item>
+       <item row="4" column="0"><widget class="QLabel" name="timelineLocationLabel"><property name="text"><string>장소</string></property></widget></item>
+       <item row="4" column="1"><widget class="QLineEdit" name="timelineLocationEdit"/></item>
+       <item row="5" column="0"><widget class="QLabel" name="timelineParticipantsLabel"><property name="text"><string>참여자</string></property></widget></item>
+       <item row="5" column="1"><widget class="QLineEdit" name="timelineParticipantsEdit"/></item>
+      </layout></widget>
+     </widget></item>
+    </layout></widget>
    </widget></item>
   </layout>
  </widget>
