@@ -11,7 +11,7 @@ DEFAULT = {
         "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta", "model": ""},
         "openai_compatible": {"base_url": "", "model": ""},
     },
-    "ai": {"temperature": 0.72, "top_p": 0.90, "max_tokens": 9000, "memory_recent_chapters": 4, "previous_tail_chars": 1500},
+    "ai": {"temperature": 0.72, "top_p": 0.90, "max_tokens": 9000, "memory_recent_chapters": 4, "previous_tail_chars": 1500, "context_budget_tokens": 60000},
     "editor": {"font_family": "Malgun Gothic", "font_size": 18, "text_color": "#E8E6E3", "bg_color": "#2B2B2B", "line_spacing": 1.4},
 }
 

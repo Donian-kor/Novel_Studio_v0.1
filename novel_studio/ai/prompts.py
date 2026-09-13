@@ -67,6 +67,19 @@ def arc_memory(start,end,section_memories):
 {section_memories[:18000]}
 """
 def chat_system(ctx): return f"당신은 작품 전용 AI 비서다. 확정된 작품 데이터와 검색 근거를 우선한다. 자료에 없으면 확인 불가라고 답한다.\n{ctx}"
+def entity_extract(ch,text):
+    """화별 '상태가 변한' 인물/세력/장소만 원장에 기록하도록 추출을 요청한다."""
+    return f"""제{ch}화 원고를 읽고 상태가 실제로 변한 인물/세력/장소만 추출하라.
+추측 금지. 변화가 없으면 빈 배열 []만 출력한다.
+반드시 JSON 배열만 출력한다. 마크다운, 설명, 코드블록 금지.
+형식 예시: [{{"kind":"인물","name":"이름","change":"이번 화에서의 상태 변화 요약"}}]
+kind는 인물/세력/장소 중 하나다. name은 작품 설정 DB의 기존 명칭과 일치시킨다.
+
+[제{ch}화 원고]
+{text[:12000]}
+"""
+
+
 def continuity(ch,text,ctx): return f"제{ch}화 원고를 아래 확정 설정/기억과 대조하여 연속성 오류만 보고하라. 추측 금지, 근거 없는 지적 금지. [모순/오류][누락 확인 필요][특이사항 없음 여부]\n[참고 자료]\n{ctx}\n\n[검사 대상 원고]\n{text}"
 def entity_extra(kind, name, context_text):
     """설정 DB 단일 항목 AI 생성용 프롬프트."""

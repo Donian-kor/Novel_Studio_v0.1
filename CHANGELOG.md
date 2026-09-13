@@ -1,3 +1,28 @@
+## v1.4.1 — Feature Release
+
+### 엔티티 상태 원장 실활용
+- 화 집필 완료 시 AI가 "이번 화에서 상태가 실제로 변한 인물/세력/장소만" 추출해 `kind='character'/'world'`, `entity_key=명칭`으로 개별 기록 (같은 원고 재갱신 시 추출 생략)
+- Retrieval Engine이 현재 화 직전 10화 구간의 확정 엔티티 상태를 컨텍스트에 공급 — 기존에는 `entity_states` 키가 누락돼 원장 블록이 항상 비어 있던 버그 수정
+- 설정 DB의 인물/세력/장소 상세에 화별 `[상태 타임라인]` 표시 추가 (저장 시 타임라인 텍스트는 데이터에서 자동 분리)
+
+### 토큰 기반 컨텍스트 예산 매니저
+- `ai.context_budget_tokens`(기본 60,000) 설정 추가 — 컨텍스트 블록을 우선순위 순서(PLAN CONTRACT > 마스터 기획/플롯 > 직전 상태 > 참고 자료)로 누적 배분하고, 예산 초과 시 하위 블록부터 제거
+- PLAN CONTRACT와 [USER REQUEST]는 항상 유지
+
+### DB 마이그레이션 프레임워크
+- `CURRENT_SCHEMA_VERSION` + 순차 `MIGRATIONS` 목록 구조로 전환 (v3: `idx_entity_state_updated` 인덱스 추가)
+- 구버전 DB는 열 때 자동으로 순차 마이그레이션 적용
+
+### CI 및 품질
+- GitHub Actions CI 파이프라인 추가 — `compileall` + `pytest` 자동화 (push/PR 시 전체 검증)
+- 저장 시점 FTS 인덱싱과 채팅 대화 이력 반영은 v1.4.0에서 이미 구현된 것을 확인하고 유지
+- 신규 테스트 6개 추가: 엔티티 추출/타임라인/마이그레이션/컨텍스트 예산
+
+### 보류 (평가 후 연기)
+- 가상 스크롤/모델-뷰 리스트 전환: `insertItems` 일괄 삽입 개선으로 수천 항목 렌더링은 충분히 원활해져, 리스크 대비 이득이 적어 연기. 필요 시 DB `limit/offset` 연결부터 단계적 도입 권장.
+
+---
+
 ## v1.4.0 — Stabilization Release
 
 ### 핵심 안정화

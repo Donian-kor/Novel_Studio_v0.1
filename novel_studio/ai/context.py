@@ -33,4 +33,23 @@ class ContextManager:
         if worlds:b.append('[RELEVANT WORLD]\n'+'\n'.join(f"- {x['name']} ({x['category']}): {(x['description'] or '')[:400]}" for x in worlds))
         if fs:b.append('[RELEVANT FORESHADOWING]\n'+'\n'.join(f"- {x['code']} {x['title']} / 상태={x['status']} / 회수={x['reveal_chapter']}" for x in fs))
         if extra:b.append('[USER REQUEST]\n'+extra)
-        return '\n\n'.join(b)
+        return '\n\n'.join(self._fit_budget(b))
+
+    def _fit_budget(self,b):
+        """토큰 예산을 넘으면 저우선순위 블록부터 제거한다.
+
+        - 블록 순서가 곧 우선순위(PLAN CONTRACT > 마스터 기획/플롯 > 직전 상태 > 참고 자료)이므로
+          앞에서부터 누적 배분하고, 예산을 넘기는 블록부터 버린다.
+        - 첫 블록(PLAN CONTRACT 등 최상위 기준)과 [USER REQUEST]는 항상 유지한다.
+        - 토큰 수는 한영 혼합 텍스트 기준 근사값(토큰≈글자/2.2)으로 계산한다.
+        """
+        try: budget=int(self.settings.data['ai'].get('context_budget_tokens',60000) or 60000)
+        except Exception: budget=60000
+        if budget<=0 or not b: return b
+        keep=[b[0]]; used=len(b[0])/2.2
+        for blk in b[1:]:
+            need=len(blk)/2.2
+            if blk.startswith('[USER REQUEST]'):
+                keep.append(blk); used+=need; continue
+            if used+need<=budget: keep.append(blk); used+=need
+        return keep

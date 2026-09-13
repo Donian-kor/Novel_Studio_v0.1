@@ -53,7 +53,22 @@ class EntitiesView(BaseView):
             self.nameEdit.clear()
             self.detail.clear()
             return
-        _,label,row=self._cache[i]; self.nameEdit.setText(self._display_name(row)); self.detail.setPlainText(self._fmt(row))
+        _,label,row=self._cache[i]; self.nameEdit.setText(self._display_name(row)); text=self._fmt(row)
+        tl=self._entity_timeline_text(kind,row)
+        if tl: text+='\n\n[상태 타임라인]\n'+tl
+        self.detail.setPlainText(text)
+
+    def _entity_timeline_text(self,kind,row):
+        """인물/세력/장소 항목에 화별 상태 변화 원장(타임라인)을 붙여 보여준다."""
+        if kind not in ('char','world'): return ''
+        name=self._display_name(row)
+        rows=self.w.db.entity_timeline(kind,name)
+        if not rows: return ''
+        return '\n'.join(f"{r['chapter_number']}화: {(r['state'] or '')[:400]}" for r in rows)
+
+    def _strip_timeline(self,text):
+        marker='\n\n[상태 타임라인]'
+        return text.split(marker,1)[0] if marker in text else text
 
     def _display_name(self,row):
         if self.catCombo.currentText()=='복선': return row['code'] or row['title'] or ''
@@ -82,11 +97,11 @@ class EntitiesView(BaseView):
             return False
         try:
             if kind=='char':
-                old=row['name']; data={**dict(row),'name':name,'profile':text};
+                old=row['name']; data={**dict(row),'name':name,'profile':self._strip_timeline(text)};
                 if old!=name: db.delete_character(old)
                 db.save_character(data)
             elif kind=='world':
-                old=row['name']; data={**dict(row),'name':name,'description':text};
+                old=row['name']; data={**dict(row),'name':name,'description':self._strip_timeline(text)};
                 if old!=name: db.delete_world(old)
                 db.save_world(data)
             elif kind=='fore':

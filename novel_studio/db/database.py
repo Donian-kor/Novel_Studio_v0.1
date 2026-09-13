@@ -6,6 +6,13 @@ from datetime import datetime
 def now():
     return datetime.now().isoformat(timespec="seconds")
 
+# 현재 스키마 버전. 스키마 변경 시 MIGRATIONS에 새 단계를 추가하고 버전을 올린다.
+CURRENT_SCHEMA_VERSION = 3
+MIGRATIONS = {
+    2: "",  # v1→v2: entity_state_ledger 등 테이블 추가(_schema()의 IF NOT EXISTS로 반영)
+    3: "CREATE INDEX IF NOT EXISTS idx_entity_state_updated ON entity_state_ledger(updated_at);",
+}
+
 class Database:
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -84,12 +91,21 @@ class Database:
         self._ensure_search_index()
 
     def _migrate_schema(self):
+        """schema_meta 버전에 맞춰 MIGRATIONS를 순차 적용한다.
+
+        - schema_meta 행이 없으면(새 DB) _schema()가 이미 최신 구조를 만들었으므로
+          최신 버전만 기록한다. 구버전 DB의 누락 오브젝트는 IF NOT EXISTS로 보완된다.
+        - 행이 있으면 현재 버전 다음 단계부터 MIGRATIONS를 순서대로 실행한다.
+        """
         row=self.conn.execute("SELECT version FROM schema_meta LIMIT 1").fetchone()
         if row is None:
-            self.conn.execute("INSERT INTO schema_meta(version) VALUES(2)")
-        elif int(row["version"]) < 2:
-            self.conn.execute("UPDATE schema_meta SET version=2")
-        self.conn.commit()
+            self.execute("INSERT INTO schema_meta(version) VALUES(?)",(CURRENT_SCHEMA_VERSION,))
+            return
+        version=int(row['version'])
+        for step in range(version+1,CURRENT_SCHEMA_VERSION+1):
+            sql=MIGRATIONS.get(step)
+            if sql: self.conn.executescript(sql)
+            self.execute("UPDATE schema_meta SET version=?",(step,))
 
     def _ensure_search_index(self):
         try:
@@ -338,6 +354,12 @@ class Database:
         self.execute("INSERT INTO entity_state_ledger(kind,entity_key,chapter_number,state,source_hash,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(kind,entity_key,chapter_number) DO UPDATE SET state=excluded.state,source_hash=excluded.source_hash,updated_at=excluded.updated_at",(str(kind),str(entity_key),int(chapter),state or '',source_hash or '',now()))
     def entity_states_for_chapter(self,chapter,limit=100):
         return self.conn.execute("SELECT * FROM entity_state_ledger WHERE chapter_number=? ORDER BY kind,entity_key LIMIT ?",(int(chapter),int(limit))).fetchall()
+    def entity_states_recent(self,chapter,span=10,limit=60):
+        """현재 화 직전 구간까지의 확정 엔티티 상태(컨텍스트 공급용)."""
+        return self.conn.execute("SELECT * FROM entity_state_ledger WHERE chapter_number>=? AND chapter_number<=? ORDER BY chapter_number DESC,kind,entity_key LIMIT ?",(max(1,int(chapter)-int(span)),int(chapter),int(limit))).fetchall()
+    def entity_timeline(self,kind,entity_key):
+        """단일 엔티티의 화별 상태 변화 전체(타임라인 조회용)."""
+        return self.conn.execute("SELECT * FROM entity_state_ledger WHERE kind=? AND entity_key=? ORDER BY chapter_number",(str(kind),str(entity_key))).fetchall()
     def entity_states(self,kind=None,entity_key=None,before=None,limit=100):
         sql="SELECT * FROM entity_state_ledger"; args=[]; where=[]
         if kind is not None: where.append("kind=?"); args.append(str(kind))

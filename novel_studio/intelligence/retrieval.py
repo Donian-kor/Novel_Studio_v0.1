@@ -14,6 +14,7 @@ class RetrievalEngine:
             'foreshadowing':self.db.foreshadows_relevant(chapter,60),
             'timeline':self.db.timeline(start=start,end=end,limit=80),
             'events':self.db.major_events(start=start,end=end,limit=50),
+            'entity_states':self.db.entity_states_recent(chapter,span=10,limit=60),
             'search':self.db.search(query,25) if query else []
         }
         return out

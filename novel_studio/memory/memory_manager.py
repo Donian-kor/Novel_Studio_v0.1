@@ -1,5 +1,6 @@
 from hashlib import sha256
-from novel_studio.ai.prompts import summary, state, section_memory, arc_memory
+from novel_studio.ai.prompts import summary, state, section_memory, arc_memory, entity_extract
+from novel_studio.utils.entity_parser import parse_entity_catalog
 
 
 class MemoryManager:
@@ -23,6 +24,7 @@ class MemoryManager:
         self.db.save_snapshot(f'chapter:{n}', sm)
         self.db.save_snapshot(f'state:{n}', st)
         if self.ledger: self.ledger.record('chapter', str(n), n, st, text)
+        self._extract_entities(n, text, source_hash)
 
         # 구간/아크의 끝 화에서만 상위 기억을 갱신하여 AI 호출을 제한한다.
         sec = self.db.section_for_chapter(n)
@@ -33,6 +35,27 @@ class MemoryManager:
                 if a_end == n:
                     self.update_arc_memory(arc_no, a_start, a_end)
         return sm, st
+
+    def _extract_entities(self, n, text, source_hash=''):
+        """이번 화에서 상태가 실제로 변한 인물/세력/장소를 원장에 개별 기록한다.
+
+        - 같은 원고(source_hash)로 이미 기록돼 있으면 재추출을 생략한다.
+        - 추출 실패가 화 상태 갱신 전체를 막지 않도록 예외를 흡수한다.
+        """
+        if not self.ai: return
+        try:
+            h = source_hash or sha256(text.encode('utf-8')).hexdigest()
+            rows = [r for r in self.db.entity_states_for_chapter(n) if r['kind'] in ('character', 'world')]
+            if rows and all(r['source_hash'] == h for r in rows): return
+            out = self.ai.generate(entity_extract(n, text), temperature=.1, max_tokens=1500)
+            items = [x for x in parse_entity_catalog(out) if isinstance(x, dict)]
+            for x in items[:20]:
+                name = str(x.get('name', '')).strip(); change = str(x.get('change', '')).strip()
+                if not name: continue
+                kind = 'character' if str(x.get('kind', '')).strip() == '인물' else 'world'
+                self.db.save_entity_state(kind, name, n, change, h)
+        except Exception:
+            pass
 
     def update_section_memory(self, s, e):
         sums = self.db.summaries(start=s, end=e)
