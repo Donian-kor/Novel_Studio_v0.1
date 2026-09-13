@@ -74,7 +74,7 @@ class AISettingsDialog(QDialog):
             self._set_color_button(button, picked)
     def save(self):
         pid=self.ids[self.provider.currentIndex()]
-        self.pm.save_provider(pid,self.urlEdit.text().strip(),self.modelEdit.text().strip(),self.keyEdit.text().strip())
+        self.pm.save_provider(pid,self.urlEdit.text().strip(),self.modelEdit.currentText().strip(),self.keyEdit.text().strip())
         self.pm.set_active(pid)
         self.settings.data['editor'].update({
             'font_family': self.fontEdit.currentFont().family(),

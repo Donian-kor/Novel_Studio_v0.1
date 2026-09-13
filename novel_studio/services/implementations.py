@@ -168,15 +168,22 @@ class ContinuityServiceImpl(ContinuityService):
         self.plot_manager = plot_manager
 
     def check_chapter(self, chapter: int, text: str) -> ContinuityResult:
-        # The checker.check returns a string? Let's see the actual implementation.
-        # For now, we'll assume it returns a string and we wrap it.
-        # But we need to return a ContinuityResult.
-        # Let's look at the actual checker.check method.
-        # Since we don't have time, we'll return a dummy result.
-        # TODO: Implement properly based on actual checker output.
         out = self.checker.check(chapter, text)
+        # Parse severity and category from out
+        if '오류' in out or '문제' in out or '실패' in out:
+            severity = 'warning'
+        else:
+            severity = 'info'
+        if '연속성' in out:
+            category = 'consistency'
+        elif '플롯' in out:
+            category = 'plot'
+        elif '인물' in out:
+            category = 'character'
+        else:
+            category = 'consistency'
         return ContinuityResult(
-            chapter=chapter, severity='info', category='consistency',
+            chapter=chapter, severity=severity, category=category,
             message=out, evidence=''
         )
 

@@ -846,6 +846,12 @@ class MainWindow(QMainWindow):
                 self.save_all(silent=True)
         except Exception:
             pass
+        # 독립 채팅창도 함께 닫기
+        try:
+            if hasattr(self, 'chat_window') and self.chat_window is not None:
+                self.chat_window.close()
+        except Exception:
+            pass
         super().closeEvent(event)
 
     def write_current(self):

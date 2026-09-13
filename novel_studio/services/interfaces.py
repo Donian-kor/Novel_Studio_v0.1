@@ -80,7 +80,7 @@ class AIService(ABC):
     
     @abstractmethod
     def generate_stream(self, prompt: str, *, temperature: float = 0.7,
-                        max_tokens: int = 2000, timeout: int = 60):
+                        max_tokens: int = 2000, timeout: int = 60) -> None:
         """스트리밍 생성 (제너레이터)"""
         pass
     
