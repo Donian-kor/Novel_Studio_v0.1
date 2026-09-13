@@ -1,4 +1,6 @@
-import json, urllib.request, urllib.error
+import json
+import urllib.request
+import urllib.error
 from .base import AIProvider, ProviderError
 
 TEST_TIMEOUT = 15
@@ -6,71 +8,105 @@ CHAT_TIMEOUT = 1800
 
 
 class OpenAICompatibleProvider(AIProvider):
-    def _base(self): return str(self.config.get('base_url','')).rstrip('/')
+    def _base(self): 
+        return str(self.config.get('base_url', '')).rstrip('/')
+    
     def _headers(self):
-        h={'Content-Type':'application/json','Accept':'application/json'}; k=self.config.get('api_key','')
-        if k:h['Authorization']='Bearer '+k
+        h = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+        k = self.config.get('api_key', '')
+        if k:
+            h['Authorization'] = 'Bearer ' + k
         return h
+    
     def list_models(self):
         try:
-            req=urllib.request.Request(self._base()+'/models',headers=self._headers())
-            with urllib.request.urlopen(req,timeout=20) as r:d=json.loads(r.read().decode())
-            return [str(x.get('id')) for x in d.get('data',[]) if x.get('id')]
-        except Exception as e: raise ProviderError(f'모델 목록 조회 실패: {e}')
-    def chat(self, messages, *, temperature, top_p, max_tokens, timeout=CHAT_TIMEOUT):
-        model=self.config.get('model','')
+            req = urllib.request.Request(self._base() + '/models', headers=self._headers())
+            with urllib.request.urlopen(req, timeout=20) as r:
+                d = json.loads(r.read().decode())
+            return [str(x.get('id')) for x in d.get('data', []) if x.get('id')]
+        except Exception as e:
+            raise ProviderError(f'모델 목록 조회 실패: {e}')
+    
+    def _chat_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        """실제 채팅 구현 (재시도 로직은 베이스 클래스에서 처리)"""
+        model = self.config.get('model', '')
         if not model:
-            models=self.list_models(); model=models[0] if models else ''
-        if not model: raise ProviderError('사용할 모델을 설정하세요.')
-        body={'model':model,'messages':messages,'temperature':temperature,'top_p':top_p,'max_tokens':max_tokens,'stream':False}
-        try:
-            req=urllib.request.Request(self._base()+'/chat/completions',data=json.dumps(body,ensure_ascii=False).encode(),headers=self._headers(),method='POST')
-            with urllib.request.urlopen(req,timeout=timeout) as r:d=json.loads(r.read().decode())
-            return d['choices'][0]['message']['content']
-        except urllib.error.HTTPError as e:
-            body_text = ''
-            try:
-                body_text = e.read().decode(errors='ignore')[:2000]
-            except Exception:
-                pass
-            raise ProviderError(f'API HTTP {e.code}: {body_text}')
-        except Exception as e: raise ProviderError(f'AI 요청 실패: {e}')
+            models = self.list_models()
+            model = models[0] if models else ''
+        if not model:
+            raise ProviderError('사용할 모델을 설정하세요.')
+        
+        body = {
+            'model': model,
+            'messages': messages,
+            'temperature': temperature,
+            'top_p': top_p,
+            'max_tokens': max_tokens,
+            'stream': False
+        }
+        
+        req = urllib.request.Request(
+            self._base() + '/chat/completions',
+            data=json.dumps(body, ensure_ascii=False).encode(),
+            headers=self._headers(),
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            d = json.loads(r.read().decode())
+        
+        return d['choices'][0]['message']['content']
+    
+    def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        """실제 스트리밍 구현 (재시도는 베이스 클래스에서 처리)"""
+        model = self.config.get('model', '')
+        if not model:
+            models = self.list_models()
+            model = models[0] if models else ''
+        if not model:
+            raise ProviderError('사용할 모델을 설정하세요.')
+        
+        body = {
+            'model': model,
+            'messages': messages,
+            'temperature': temperature,
+            'top_p': top_p,
+            'max_tokens': max_tokens,
+            'stream': True
+        }
+        
+        req = urllib.request.Request(
+            self._base() + '/chat/completions',
+            data=json.dumps(body, ensure_ascii=False).encode(),
+            headers=self._headers(),
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            while True:
+                line = r.readline().decode('utf-8', errors='ignore')
+                if not line:
+                    break
+                line = line.strip()
+                if not line.startswith('data:'):
+                    continue
+                data = line[5:].strip()
+                if data == '[DONE]':
+                    break
+                try:
+                    d = json.loads(data)
+                    delta = d['choices'][0].get('delta', {}).get('content')
+                    if delta:
+                        yield delta
+                except Exception:
+                    continue
 
-    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=CHAT_TIMEOUT):
-        """OpenAI 호환 SSE 스트리밍. 토큰 단위로 조각을 yield한다."""
-        model=self.config.get('model','')
-        if not model:
-            models=self.list_models(); model=models[0] if models else ''
-        if not model: raise ProviderError('사용할 모델을 설정하세요.')
-        body={'model':model,'messages':messages,'temperature':temperature,'top_p':top_p,'max_tokens':max_tokens,'stream':True}
-        req=urllib.request.Request(self._base()+'/chat/completions',data=json.dumps(body,ensure_ascii=False).encode(),headers=self._headers(),method='POST')
-        try:
-            with urllib.request.urlopen(req,timeout=timeout) as r:
-                while True:
-                    line = r.readline().decode('utf-8', errors='ignore')
-                    if not line:
-                        break
-                    line = line.strip()
-                    if not line.startswith('data:'):
-                        continue
-                    data = line[5:].strip()
-                    if data == '[DONE]':
-                        break
-                    try:
-                        d = json.loads(data)
-                        delta = d['choices'][0].get('delta', {}).get('content')
-                        if delta:
-                            yield delta
-                    except Exception:
-                        continue
-        except urllib.error.HTTPError as e:
-            body_text = ''
-            try:
-                body_text = e.read().decode(errors='ignore')[:2000]
-            except Exception:
-                pass
-            raise ProviderError(f'API HTTP {e.code}: {body_text}')
-        except Exception as e: raise ProviderError(f'AI 요청 실패: {e}')
+    def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        # 재시도 로직은 베이스 클래스의 _retry_decorator가 처리
+        return super().chat(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
+
+    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
 
     def quick_test(self):
         """짧은 타임아웃으로 연결 테스트를 수행한다.
@@ -90,10 +126,12 @@ class OpenAICompatibleProvider(AIProvider):
                 self.config['model'] = model
             return self.chat(
                 [{'role': 'user', 'content': 'Reply with exactly: 연결 테스트 성공'}],
-                temperature=.1, top_p=.9, max_tokens=32, timeout=TEST_TIMEOUT,
+                temperature=.1, top_p=.9, max_tokens=32, timeout=15,
             )
         except ProviderError:
             raise
+
+
 class LMStudioProvider(OpenAICompatibleProvider):
     def __init__(self, config):
         cfg = dict(config or {})

@@ -1,0 +1,68 @@
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ai/context.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ai/prompts.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ai/providers/anthropic.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/core/project.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/db/database.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/logging_config.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/manuscript/chapter_writer.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/memory/memory_manager.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/plot/plot_manager.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/dialogs.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/forms/ai_settings.ui', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/forms/memory.ui', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/forms/planning.ui', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/forms/plots.ui', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/main_window.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/views/entities.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/views/memory.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/views/planning.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/views/plots.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'novel_studio/ui/views/ranges.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'requirements.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'version.txt', LF will be replaced by CRLF the next time Git touches it
+ CHANGELOG_v1.1.1.md                       |   8 [31m-[m
+ CHANGELOG_v1.1.2.md                       |  16 [31m--[m
+ CHANGELOG_v1.1.3.md                       |  13 [31m-[m
+ CHANGELOG_v1.1.4.md                       |  19 [31m--[m
+ CHANGELOG_v1.1.md                         |  31 [31m---[m
+ Novel_Studio.zip                          | Bin [31m451248[m -> [32m0[m bytes
+ README.md                                 | 177 [32m++[m[31m-----------[m
+ __pycache__/main.cpython-313.pyc          | Bin [31m2696[m -> [32m2658[m bytes
+ novel_studio/ai/context.py                |  46 [32m++[m[31m--[m
+ novel_studio/ai/prompts.py                |  18 [32m++[m
+ novel_studio/ai/providers/anthropic.py    |  24 [32m+[m[31m-[m
+ novel_studio/core/project.py              |  35 [32m++[m[31m-[m
+ novel_studio/core/settings.py             |  65 [31m-----[m
+ novel_studio/db/database.py               | 401 [32m+++++++++++++++++++++++++++[m[31m---[m
+ novel_studio/logging_config.py            |   2 [32m+[m[31m-[m
+ novel_studio/manuscript/chapter_writer.py |  17 [32m+[m[31m-[m
+ novel_studio/memory/memory_manager.py     |  71 [32m+++++[m[31m-[m
+ novel_studio/plot/plot_manager.py         |  22 [32m+[m[31m-[m
+ novel_studio/ui/dialogs.py                |  62 [32m++++[m[31m-[m
+ novel_studio/ui/forms/ai_settings.ui      |   3 [32m+[m[31m-[m
+ novel_studio/ui/forms/ai_settings_ui.py   |  41 [32m++[m[31m-[m
+ novel_studio/ui/forms/dashboard.ui        |   1 [31m-[m
+ novel_studio/ui/forms/dashboard_ui.py     |  53 [31m----[m
+ novel_studio/ui/forms/idea.ui             |   1 [31m-[m
+ novel_studio/ui/forms/idea_ui.py          |  70 [31m------[m
+ novel_studio/ui/forms/memory.ui           |   2 [32m+[m[31m-[m
+ novel_studio/ui/forms/memory_ui.py        |  21 [32m+[m[31m-[m
+ novel_studio/ui/forms/planning.ui         |   1 [32m+[m
+ novel_studio/ui/forms/plots.ui            |   2 [32m+[m[31m-[m
+ novel_studio/ui/forms/plots_ui.py         |  33 [32m++[m[31m-[m
+ novel_studio/ui/forms/ranges_ui.py        |   6 [32m+[m
+ novel_studio/ui/forms/sections.ui         |  33 [31m---[m
+ novel_studio/ui/forms/sections_ui.py      |  92 [31m-------[m
+ novel_studio/ui/main_window.py            | 151 [32m++++++++[m[31m---[m
+ novel_studio/ui/views/dashboard.py        |   5 [31m-[m
+ novel_studio/ui/views/entities.py         |   2 [32m+[m[31m-[m
+ novel_studio/ui/views/idea.py             |   5 [31m-[m
+ novel_studio/ui/views/memory.py           |   4 [32m+[m[31m-[m
+ novel_studio/ui/views/planning.py         |   2 [32m+[m[31m-[m
+ novel_studio/ui/views/plots.py            |  10 [32m+[m[31m-[m
+ novel_studio/ui/views/ranges.py           |   7 [32m+[m[31m-[m
+ novel_studio/ui/views/sections.py         | 126 [31m----------[m
+ requirements.txt                          |   1 [32m+[m
+ version.txt                               |   2 [32m+[m[31m-[m
+ 44 files changed, 864 insertions(+), 837 deletions(-)

@@ -47,6 +47,13 @@ class Ui_MainWidget(object):
 
         self.top.addWidget(self.aiStatus)
 
+        self.testConnBtn = QPushButton(MainWidget)
+        self.testConnBtn.setObjectName(u"testConnBtn")
+        self.testConnBtn.setMinimumSize(QSize(34, 28))
+        self.testConnBtn.setMaximumSize(QSize(34, 28))
+
+        self.top.addWidget(self.testConnBtn)
+
         self.settingsBtn = QPushButton(MainWidget)
         self.settingsBtn.setObjectName(u"settingsBtn")
 
@@ -188,6 +195,10 @@ class Ui_MainWidget(object):
         self.appTitle.setText(QCoreApplication.translate("MainWidget", u"Novel Studio", None))
         self.projectLabel.setText(QCoreApplication.translate("MainWidget", u"\uc791\ud488", None))
         self.aiStatus.setText(QCoreApplication.translate("MainWidget", u"AI \u25cf \ud655\uc778 \ud544\uc694", None))
+        self.testConnBtn.setText("")
+#if QT_CONFIG(tooltip)
+        self.testConnBtn.setToolTip(QCoreApplication.translate("MainWidget", u"AI \uc5f0\uacb0 \ud14c\uc2a4\ud2b8: \ud074\ub9ad\ud558\uba74 \ud604\uc7ac \ud65c\uc131 \ud504\ub85c\ubc14\uc774\ub354\ub85c \uc5f0\uacb0\uc744 \ud655\uc778\ud569\ub2c8\ub2e4.", None))
+#endif // QT_CONFIG(tooltip)
         self.settingsBtn.setText(QCoreApplication.translate("MainWidget", u"\uc124\uc815", None))
         self.stopBtn.setText(QCoreApplication.translate("MainWidget", u"\u23f9 \uc815\uc9c0", None))
         self.leftCollapse.setText(QCoreApplication.translate("MainWidget", u"\uc67c\ucabd \uc0ac\uc774\ub4dc\ubc14 \uc811\uae30 \u25c0", None))

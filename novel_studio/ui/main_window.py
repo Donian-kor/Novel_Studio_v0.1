@@ -6,8 +6,8 @@ import subprocess
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QListWidget,
                                  QStackedWidget, QLabel, QPushButton, QFrame,
                                  QPlainTextEdit, QDialog, QComboBox)
-from PySide6.QtCore import QThreadPool, QTimer
-from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence
+from PySide6.QtCore import QThreadPool, QTimer, Qt
+from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor
 from novel_studio.ui.loader import load_ui
 from novel_studio.ui.views.planning import PlanningView
 from novel_studio.ui.views.entities import EntitiesView
@@ -18,7 +18,7 @@ from novel_studio.ui.views.memory import MemoryView
 from novel_studio.ui.views.chat import ChatWindow
 from novel_studio.core.project import ProjectManager
 from novel_studio.core.app_settings import AppSettings
-from novel_studio.db.database import Database
+from novel_studio.db.threadsafe_database import ThreadSafeDatabase as Database
 from novel_studio.ai.provider_manager import ProviderManager
 from novel_studio.ai.engine import AIEngine
 from novel_studio.ai.context import ContextManager
@@ -38,6 +38,7 @@ from novel_studio.intelligence.diff import MasterDiffService
 from novel_studio.jobs.worker import Job, StreamJob
 from novel_studio.ui.dialogs import AISettingsDialog, ProjectSettingsDialog
 from novel_studio.utils.text import count_chars, strip_ai_marks, check_spelling
+from novel_studio.controllers.novel_controller import NovelController
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,48 @@ class MainWindow(QMainWindow):
         self._load_all()
         self._build_project_menu()
     def _init_services(self):
+        # Core services initialization
         self.pm=ProjectManager(); self.pm.open(self.project_root); self.app=AppSettings(); self.db=Database(self.project_root/'novel.db'); total=int(self.pm.settings.get('target_chapters',500)); target=int(self.pm.settings.get('chapter_chars',5000)); self.db.ensure_chapters(total,target); self.providers=ProviderManager(self.app); self.ai=AIEngine(self.providers,self.app); self.context=ContextManager(self.db,self.pm,self.app); self.idea_service=IdeaService(self.db,self.ai,self.pm); self.master=MasterPlanner(self.db,self.ai,self.pm); self.plot=PlotManager(self.db,self.ai,self.pm); self.ledger=StateLedger(self.db); self.master_diff=MasterDiffService(self.db,self.ai); self.writer=ChapterWriter(self.db,self.ai,self.pm,self.context); self.memory=MemoryManager(self.db,self.ai,self.ledger); self.checker=ContinuityChecker(self.db,self.ai,self.context)
+        
+        # Create service implementations for the controller
+        from novel_studio.services.implementations import (
+            ProjectServiceImpl, AIServiceImpl, DatabaseServiceImpl, ContextServiceImpl,
+            SettingsServiceImpl, ContinuityServiceImpl, WritingServiceImpl, MemoryServiceImpl, ExportServiceImpl
+        )
+        services = {
+            'project': ProjectServiceImpl(self.pm, self.app),
+            'ai': AIServiceImpl(self.ai),
+            'db': DatabaseServiceImpl(self.db),
+            'context': ContextServiceImpl(self.context),
+            'settings': SettingsServiceImpl(self.app, self.providers),
+            'continuity': ContinuityServiceImpl(self.checker, self.plot),
+            'writing': WritingServiceImpl(self.writer, self.ai),
+            'memory': MemoryServiceImpl(self.memory, self.db),
+            'export': ExportServiceImpl(self.pm)
+        }
+        # Create and connect Controller
+        self.controller = NovelController(self)
+        self.controller.set_services(services)
+        self._connect_controller_signals()
+        
+    def _connect_controller_signals(self):
+        """Connect Controller signals to UI updates."""
+        self.controller.status_changed.connect(self.statusBar().showMessage)
+        self.controller.progress_updated.connect(self._on_progress_update)
+        self.controller.chapter_changed.connect(self._on_chapter_changed)
+        self.controller.ai_status_changed.connect(self._update_ai_status)
+        self.controller.error_occurred.connect(self._error)
+    
+    def _on_progress_update(self, current: int, total: int, message: str):
+        """Handle progress updates from controller."""
+        pct = int(current / max(1, total) * 100)
+        self.statusBar().showMessage(f'{message} ({current}/{total}) {pct}%')
+        # Update progress in UI if needed
+        
+    def _on_chapter_changed(self, chapter: int):
+        """Handle chapter change from controller."""
+        self.current = chapter
+        self.load_chapter(chapter)
     def _init_ui(self):
         self.ui=load_ui('main_window.ui'); self.setCentralWidget(self.ui); self.nav=self.ui.findChild(QListWidget,'navList'); self.stack=self.ui.findChild(QStackedWidget,'pageStack'); self.left=self.ui.findChild(QFrame,'leftPanel'); self.right=self.ui.findChild(QFrame,'rightPanel'); self.left_handle=self.ui.findChild(QFrame,'leftHandle'); self.right_handle=self.ui.findChild(QFrame,'rightHandle'); self.aiStatus=self.ui.findChild(QLabel,'aiStatus')
         self.views=[PlanningView(self),EntitiesView(self),RangesView(self),PlotsView(self),ManuscriptView(self),MemoryView(self)]
@@ -76,7 +118,7 @@ class MainWindow(QMainWindow):
         if self.stopBtn is not None:
             self.stopBtn.clicked.connect(self._stop)
             self.stopBtn.setEnabled(False)
-        self.ui.findChild(QPushButton,'leftCollapse').clicked.connect(lambda:self._set_left(False)); self.ui.findChild(QPushButton,'leftExpand').clicked.connect(lambda:self._set_left(True)); self.ui.findChild(QPushButton,'rightCollapse').clicked.connect(lambda:self._set_right(False)); self.ui.findChild(QPushButton,'rightExpand').clicked.connect(lambda:self._set_right(True)); self.ui.findChild(QPushButton,'settingsBtn').clicked.connect(self.open_settings); self.ui.findChild(QPushButton,'chatBtn').clicked.connect(self.open_ai_chat); self._set_left(True); self._set_right(True); self._build_top_dashboard()
+        self.ui.findChild(QPushButton,'leftCollapse').clicked.connect(lambda:self._set_left(False)); self.ui.findChild(QPushButton,'leftExpand').clicked.connect(lambda:self._set_left(True)); self.ui.findChild(QPushButton,'rightCollapse').clicked.connect(lambda:self._set_right(False)); self.ui.findChild(QPushButton,'rightExpand').clicked.connect(lambda:self._set_right(True)); self.ui.findChild(QPushButton,'settingsBtn').clicked.connect(self.open_settings); self._init_conn_test_btn(); self.ui.findChild(QPushButton,'chatBtn').clicked.connect(self.open_ai_chat); self._set_left(True); self._set_right(True); self._build_top_dashboard()
         sa = self.ui.findChild(QPushButton, 'saveAllBtn')
         if sa is not None:
             sa.clicked.connect(self.save_all)
@@ -219,14 +261,20 @@ class MainWindow(QMainWindow):
         dlg = StartupDialog()
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.selected_project:
             self._save_last_project(dlg.selected_project)
-            self._restart_with(dlg.selected_project)
+            if self.controller.new_project(str(dlg.selected_project)):
+                self._restart_with(dlg.selected_project)
+            else:
+                QMessageBox.warning(self, '오류', '새 프로젝트를 만드는 데 실패했습니다.')
 
     def open_project(self):
         from novel_studio.ui.startup import StartupDialog
         dlg = StartupDialog()
         if dlg.exec() == dlg.DialogCode.Accepted and dlg.selected_project:
             self._save_last_project(dlg.selected_project)
-            self._restart_with(dlg.selected_project)
+            if self.controller.open_project(str(dlg.selected_project)):
+                self._restart_with(dlg.selected_project)
+            else:
+                QMessageBox.warning(self, '오류', '프로젝트를 여는 데 실패했습니다.')
 
     def edit_project_settings(self):
         d = ProjectSettingsDialog(self.pm, self)
@@ -806,38 +854,70 @@ class MainWindow(QMainWindow):
         if not self._check_write_prereq():
             return
 
-        def stream(on_token):
-            collected = []
-            for t in self.writer.write_stream(self.current):
-                if self._current_job is not None and self._current_job.is_cancelled():
-                    break
-                on_token(t)
-                collected.append(t)
-            return ''.join(collected)
+        def stream_callback(token):
+            """스트리밍 토큰을 에디터에 추가"""
+            try:
+                cur = self.views[4].editor.textCursor()
+                cur.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.MoveAnchor)
+                self.views[4].editor.setTextCursor(cur)
+                self.views[4].editor.insertPlainText(token)
+            except Exception:
+                pass
 
-        self._run_stream(f'{self.current}화 AI 집필 중...', stream, self._after_write,
-                         append=self.views[4].editor)
-    def _after_write(self,t):
+        def done_callback(result):
+            """집필 완료 후 처리"""
+            if self._current_job is not None and self._current_job.is_cancelled():
+                return
+            self._handle_written_result(result)
+
+        self.controller.write_chapter(self.current, stream_callback, done_callback)
+
+    def _handle_written_result(self, text):
+        """집필된 텍스트를 처리 (글자 수 보정 및 기억/연속성 업데이트)"""
         if self._current_job is not None and self._current_job.is_cancelled():
             return
-        target=int(self.pm.settings['chapter_chars']); tol=int(self.pm.settings['tolerance']); n=count_chars(t)
-        if not target-tol<=n<=target+tol:
+        target = int(self.pm.settings['chapter_chars'])
+        tol = int(self.pm.settings.get('tolerance', 50))
+        n = count_chars(text)
+        if not target - tol <= n <= target + tol:
             if self._adjust_attempts < 3:
                 self._adjust_attempts += 1
-                attempt=self._adjust_attempts
-                self._run(f'목표 글자 수 보정 중... ({attempt}/3)',lambda:self.writer.adjust(t,target,tol),self._after_write)
+                attempt = self._adjust_attempts
+                self._run(f'목표 글자 수 보정 중... ({attempt}/3)',
+                          lambda: self.writer.adjust(text, target, tol),
+                          lambda adjusted: self._handle_written_result(adjusted))
                 return
-            self.views[4].editor.setPlainText(t); self.update_count()
-            QMessageBox.warning(self,'글자 수 보정 중단',f'3회 보정 후에도 목표 범위를 벗어났습니다. 현재 {n}자입니다. 원고를 그대로 유지합니다.')
-        else:
-            self.views[4].editor.setPlainText(t); self.update_count()
-        def memory_job():
-            prev = self.db.latest_chapter_state(self.current - 1)
-            previous_state = (prev['state'] if prev else '') if prev else ''
-            return self.memory.update(self.current,t,previous_state),self.checker.check(self.current,t)
-        self._run('기억/연속성 자동 갱신 중...',memory_job,lambda result:self.views[5].edit.setPlainText(result[0][0]+'\n\n[연속성]\n'+result[1]))
-    def revise_current(self): self._run('AI 윤문 중...',lambda:self.ai.generate('사건과 설정을 변경하지 말고 다음 원고를 자연스럽게 윤문하라. 본문만 출력.\n'+self.views[4].editor.toPlainText(),temperature=.38,max_tokens=14000),self._apply_text)
-    def _apply_text(self,t): self.views[4].editor.setPlainText(t); self.update_count()
+            # 모든 보정 시도를 소진했음
+            self.views[4].editor.setPlainText(text)
+            self.update_count()
+            QMessageBox.warning(self, '글자 수 보정 중단',
+                                f'3회 보정 후에도 목표 범위를 벗어났습니다. 현재 {n}자입니다. 원고를 그대로 유지합니다.')
+            return
+
+        # 글자 수가 목표 범위 내에 있음
+        self.views[4].editor.setPlainText(text)
+        self.update_count()
+        # 기억/연속성 자동 갱신
+        self._run('기억/연속성 자동 갱신 중...',
+                  lambda: self._update_memory_and_continuity(self.current, text),
+                  lambda mem_result: self.views[5].edit.setPlainText(mem_result[0][0] + '\n\n[연속성]\n' + mem_result[1]))
+    def _update_memory_and_continuity(self, chapter: int, text: str) -> tuple:
+        """기억과 연속성을 업데이트하고 결과를 반환"""
+        prev = self.db.latest_chapter_state(chapter - 1)
+        previous_state = (prev['state'] if prev else '') if prev else ''
+        return self.memory.update(chapter, text, previous_state), self.checker.check(chapter, text)
+
+
+    def revise_current(self):
+        text = self.views[4].editor.toPlainText()
+        def stream_callback(token):
+            self.views[4].editor.insertPlainText(token)
+
+        def done_callback(result):
+            self.views[4].editor.setPlainText(result)
+            self.update_count()
+
+        self.controller.revise_text(text, stream_callback, done_callback)
     def _refresh_long_memory(self):
         path=self.project_root/'chapters'/f'{self.current:03d}.txt'
         if not path.exists(): QMessageBox.information(self,'장기 기억','현재 화 원고가 없습니다.'); return
@@ -847,21 +927,52 @@ class MainWindow(QMainWindow):
         except Exception as e: QMessageBox.critical(self,'장기 기억 오류',str(e))
 
     def audit_long_form(self):
-        findings=[]
-        for s0,e0 in self.plot.ranges_by_size(50):
-            secs=self.db.sections_overlapping(s0,e0)
-            source='\n'.join(r['content'] for r in secs)[:22000]
-            out=self.ai.generate(f'{s0}~{e0}화 설정/복선/시간축 연속성 문제만 검사하라. 추측 금지.\n{source}',temperature=.1,max_tokens=5000)
-            self.db.add_continuity(e0,'정밀','구간',out)
-            findings.append(f'[{s0}~{e0}]\n{out}')
-        return '\n\n'.join(findings)
+        """장편 정밀 연속성 검사 - 진행률 표시 및 취소 지원"""
+        mem = self.views[5]
+        findings = []
+        
+        def progress_callback(current, total, range_str, result_text):
+            if self._current_job and self._current_job.is_cancelled():
+                return
+            pct = int(current / max(1, total) * 100)
+            self.statusBar().showMessage(f'장편 정밀 검사: {pct}% ({current}/{total}) {range_str}')
+            if hasattr(mem, 'edit'):
+                mem.edit.setPlainText(f'진행률: {pct}% ({current}/{total}) {range_str}\n\n' + 
+                    '\n\n'.join(findings) if findings else '')
+        
+        def audit_job():
+            def progress_cb(current, total, range_str, result_text):
+                progress_callback(current, total, range_str, result_text)
+                if result_text:
+                    findings.append(f'[{range_str}]\n{result_text}')
+            
+            return self.controller.continuity_service.audit_long_form(
+                size=50,
+                progress=progress_cb,
+                cancelled_check=lambda: self._current_job is not None and self._current_job.is_cancelled()
+            )
+        
+        def on_done(result):
+            if self._current_job and self._current_job.is_cancelled():
+                return
+            mem.edit.setPlainText(result)
+            self.statusBar().showMessage('장편 정밀 검사 완료')
+            QMessageBox.information(self, '장편 정밀 검사 완료', f'총 {len(findings)}개 구간 검사 완료')
+        
+        self._run('장편 정밀 연속성 검사 중...', audit_job, on_done)
 
-    def check_current(self): self._run('AI 연속성 검사 중...',lambda:self.checker.check(self.current,self.views[4].editor.toPlainText()),lambda t:self.views[5].edit.setPlainText(t))
+    def check_current(self):
+        text = self.views[4].editor.toPlainText()
+        def done_callback(result):
+            self.views[5].edit.setPlainText(result)
+        
+        self.controller.check_current_chapter(self.current, text, done_callback)
     def spellcheck_current(self):
         """요청 7-1: 맞춤법 검사. py-hanspell이 있으면 사용, 없으면 AI로 대체한다."""
         t = self.views[4].editor.toPlainText()
         if not t.strip():
             return
+
         corrected, nerr, _ = check_spelling(t)
         if corrected is not None:
             if nerr == 0:
@@ -876,8 +987,8 @@ class MainWindow(QMainWindow):
         # py-hanspell 미설치 → AI 맞춤법 검사
         self._run('AI 맞춤법 검사 중...',
                   lambda: self.ai.generate('다음 원고의 맞춤법·띄어쓰기·문법 오류만 수정하라. '
-                                           '내용과 문체는 절대 바꾸지 말고 수정된 원고 전체만 출력하라.\n' + t,
-                                           temperature=0, max_tokens=16000),
+                                            '내용과 문체는 절대 바꾸지 말고 수정된 원고 전체만 출력하라.\n' + t,
+                                            temperature=0, max_tokens=16000),
                   lambda out: self._spell_apply(out))
     def _spell_apply(self, out):
         out = (out or '').strip()
@@ -922,6 +1033,80 @@ class MainWindow(QMainWindow):
                          lambda t:(self.db.add_chat('assistant',t,self.current),self.chat_window.refresh(self.db.chat_messages(limit=200))),
                          append=self.chat_window.log,replace=False)
     def open_ai_chat(self): self.chat_window.show(); self.chat_window.raise_(); self.chat_window.activateWindow()
+    def _init_conn_test_btn(self):
+        """상단 연결 테스트 버튼(●)을 초기화한다. 초기 상태는 빨강(미연결)."""
+        btn = self.ui.findChild(QPushButton, 'testConnBtn')
+        if btn is None:
+            return
+        btn.setText('')
+        btn.setToolTip('AI 연결 테스트: 클릭하면 현재 활성 프로바이더로 연결을 확인합니다.')
+        self._set_conn_state(False, '미연결 - 클릭하면 연결을 테스트합니다.')
+        btn.clicked.connect(self.run_connection_test)
+
+    def _conn_icon(self, color):
+        """연결 상태를 표시하는 원형 색상 아이콘을 만든다."""
+        pm = QPixmap(16, 16)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(QColor(color))
+        p.setPen(QColor('#4B5563'))
+        p.drawEllipse(2, 2, 11, 11)
+        p.end()
+        return QIcon(pm)
+
+    def _set_conn_state(self, ok, message=''):
+        """연결 상태 아이콘 갱신. ok: True(초록/연결됨), False(빨강/미연결), None(회색/테스트 중)"""
+        btn = self.ui.findChild(QPushButton, 'testConnBtn')
+        if btn is None:
+            return
+        color = {True: '#22C55E', False: '#EF4444', None: '#9CA3AF'}.get(ok)
+        btn.setIcon(self._conn_icon(color))
+        btn.setToolTip(message or 'AI 연결 테스트')
+
+    def run_connection_test(self):
+        """현재 활성 프로바이더의 저장된 설정으로 연결 테스트만 수행한다(설정 저장 없음)."""
+        if self._busy:
+            return  # _run이 이미 '작업 중' 경고를 표시한다
+        try:
+            pid = self.app.data['active_provider']
+        except Exception:
+            pid = 'lmstudio'
+        name = self.providers.IDS.get(pid, pid)
+        cfg = self.providers.config(pid)
+        base_url = str(cfg.get('base_url', '') or '')
+        model = str(cfg.get('model', '') or '')
+        api_key = str(cfg.get('api_key', '') or '')
+
+        def do_test():
+            try:
+                tmp = self.providers.build_unsaved(pid, base_url, model, api_key)
+                tester = getattr(tmp, 'quick_test', None)
+                res = tester() if callable(tester) else tmp.test()
+                return True, (str(res) if res else '')
+            except Exception as e:
+                return False, str(e)
+
+        self._set_conn_state(None, f'{name} 연결 테스트 중...')
+        self._run(f'{name} 연결 테스트 중...', do_test, self._on_conn_result)
+
+    def _on_conn_result(self, result):
+        """연결 테스트 결과를 아이콘 색상과 메시지로 표시한다."""
+        ok, msg = result
+        try:
+            pid = self.app.data['active_provider']
+        except Exception:
+            pid = ''
+        name = self.providers.IDS.get(pid, pid or 'AI')
+        if ok:
+            self._set_conn_state(True, f'{name} 연결 성공')
+            self.statusBar().showMessage(f'{name} 연결 성공')
+            QMessageBox.information(self, '연결 테스트', f'{name} 연결 성공\n\n{msg}')
+        else:
+            self._set_conn_state(False, f'{name} 연결 실패')
+            self.statusBar().showMessage(f'{name} 연결 실패')
+            QMessageBox.critical(self, '연결 테스트 실패', f'{name} 연결 실패\n\n{msg}')
+
     def open_settings(self):
         d=AISettingsDialog(self.providers,self.app,self)
         if d.exec()==QDialog.DialogCode.Accepted:self._update_ai_status(); self.apply_editor_style()

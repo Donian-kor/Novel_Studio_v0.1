@@ -53,7 +53,7 @@ class EntitiesView(BaseView):
             self.nameEdit.clear()
             self.detail.clear()
             return
-        _,label,row=self._cache[i]; self.nameEdit.setText(self._display_name(row)); text=self._fmt(row)
+        kind,label,row=self._cache[i]; self.nameEdit.setText(self._display_name(row)); text=self._fmt(row)
         tl=self._entity_timeline_text(kind,row)
         if tl: text+='\n\n[상태 타임라인]\n'+tl
         self.detail.setPlainText(text)
