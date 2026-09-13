@@ -1,3 +1,52 @@
+## v1.4.5 — entities.ui 버그 수정
+
+### 인물/세력/장소 상세 UI 버그 수정
+- `entities.ui` 위젯 레이아웃 문제 수정 (6줄 변경)
+
+---
+
+## v1.4.3 — 설정 DB 개편
+
+### 설정 DB(인물/세력/장소) 상세 기능 개편
+- `entities.py` 뷰 로직 재구성 (585줄 변경) — 인물/세력/장소 상세 편집 UI 대폭 개선
+- `entities.ui` 레이아웃 갱신 (111줄 변경) — 상세 입력 필드 및 레이아웃 수정
+- 데이터 입출력 로직 정비 및 편집/저장/삭제 흐름 재구성
+
+---
+
+## v1.4.2 — 아키텍처 리팩토링 및 안정화
+
+### 서비스 계층 분리
+- `NovelController` 도입으로 UI 로직과 비즈니스 로직 분리
+- `ThreadSafeDatabase` 구현으로 DB 접근 안전성 강화
+- `services/interfaces.py` + `services/implementations.py` 추가 — AI, 스토리지, 검색, 연속성 검사 등 서비스 인터페이스/구현체 분리
+- `factories.py` 추가 — 서비스 팩토리 패턴 도입
+
+### AI Provider 리팩토링
+- `ai/providers/base.py` 대폭 수정 — 공통 Provider 인터페이스 정비
+- `ai/providers/anthropic.py`, `gemini.py`, `openai_compatible.py` 대폭 수정 — 프로바이더별 구현 리팩토링
+- `ai/context.py` 대폭 수정 — 컨텍스트 빌더 로직 개선
+
+### 메인 창 기능 추가
+- AI 연결 테스트 버튼(●) 추가 — 상단 툴바에 연결 상태를 색상으로 표시하는 원형 아이콘 버튼
+- 연결 상태 색상: 초록(연결 성공) / 빨강(미연결·실패) / 회색(테스트 중)
+- `run_connection_test()`로 현재 활성 프로바이더 연결 상태 확인 기능 제공
+
+### 유틸리티/인프라
+- `utils/retry.py` 추가 — 재시도 로직 유틸리티
+- `requirements.txt` 업데이트
+- `run_windows.bat` 수정
+
+### 프로젝트 규칙/문서 정비
+- `.clinerules/python-agent.md`, `.kilo/rules/kilorules.md`, `.kilo/kilo.jsonc` 추가
+- `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` 추가 — 개발 규칙 및 코딩 에이전트 지침 문서화
+
+### 기타
+- `novel_studio/ui/views/entities.py` 미세 조정 (2줄)
+- `main_window.ui` 2줄 변경
+
+---
+
 ## v1.4.1 — Feature Release
 
 ### 엔티티 상태 원장 실활용

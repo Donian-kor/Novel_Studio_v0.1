@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
     NAV=['기획','설정 DB','스토리 구간','화별 플롯','원고','기억 / 연속성']
     def __init__(self, project_root):
         super().__init__()
-        self.setWindowTitle('Novel Studio v1.3.1')
+        self.setWindowTitle('Novel Studio v1.4.1')
         self.resize(1700, 1000)
         self.project_root = Path(project_root)
         self.pool = QThreadPool(self)
@@ -230,7 +230,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         QMessageBox.about(
             self, 'Novel Studio 정보',
-            '<b>Novel Studio</b> v1.3.1<br><br>'
+            '<b>Novel Studio</b> v1.4.1<br><br>'
             '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
             '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
 

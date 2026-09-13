@@ -56,8 +56,9 @@ class Ui_AISettingsDialog(object):
 
         self.f.setWidget(2, QFormLayout.ItemRole.LabelRole, self.modelLbl)
 
-        self.modelEdit = QLineEdit(self.aiBox)
+        self.modelEdit = QComboBox(self.aiBox)
         self.modelEdit.setObjectName(u"modelEdit")
+        self.modelEdit.setEditable(True)
 
         self.f.setWidget(2, QFormLayout.ItemRole.FieldRole, self.modelEdit)
 

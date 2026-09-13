@@ -74,9 +74,6 @@ class ProjectManager:
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)
         return path
-        tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, path)
-        return path
 
     def export_all_chapters(self):
         """작성된 전체 원고를 exports/ 폴더에 단일 텍스트 파일로 병합 저장."""

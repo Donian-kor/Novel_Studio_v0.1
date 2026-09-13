@@ -28,7 +28,26 @@ class AISettingsDialog(QDialog):
         self.resize(780,740)
     def load_provider(self,i):
         if not self.ids:return
-        pid=self.ids[i]; c=self.pm.config(pid); self.urlEdit.setText(c.get('base_url','')); self.modelEdit.setText(c.get('model','')); self.keyEdit.setText(c.get('api_key',''))
+        pid=self.ids[i]; c=self.pm.config(pid)
+        self.urlEdit.setText(c.get('base_url',''))
+        self.keyEdit.setText(c.get('api_key',''))
+        self.modelEdit.clear()
+        try:
+            provider = self.pm._build(pid, c)
+            models = provider.list_models()
+            if models:
+                self.modelEdit.addItems(models)
+        except Exception:
+            pass  # 모델 조회 실패 → 편집 가능한 빈 콤보박스 유지
+        saved_model = (c.get('model') or '').strip()
+        if saved_model:
+            idx = self.modelEdit.findText(saved_model)
+            if idx >= 0:
+                self.modelEdit.setCurrentIndex(idx)
+            else:
+                self.modelEdit.setEditText(saved_model)
+        else:
+            self.modelEdit.setEditText('')
 
     def _load_editor_controls(self):
         editor=self.settings.data.get('editor', {})
@@ -75,7 +94,7 @@ class AISettingsDialog(QDialog):
         try:
             pid = self.ids[self.provider.currentIndex()]
             base_url = self.urlEdit.text().strip()
-            model = self.modelEdit.text().strip()
+            model = self.modelEdit.currentText().strip()
             api_key = self.keyEdit.text().strip()
             # 저장 전에 임시 프로바이더로 테스트
             tmp = self.pm.build_unsaved(pid, base_url, model, api_key)
@@ -87,7 +106,7 @@ class AISettingsDialog(QDialog):
             # 자동 감지된 모델이 있으면 입력란에 반영
             detected = (tmp.config.get('model') or '').strip()
             if detected and not model:
-                self.modelEdit.setText(detected)
+                self.modelEdit.setEditText(detected)
                 model = detected
             # 성공 시에만 저장
             self.pm.save_provider(pid, base_url, model, api_key)
