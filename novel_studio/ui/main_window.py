@@ -458,7 +458,7 @@ class MainWindow(QMainWindow):
         self._adjust_attempts = 0
 
     def _stop(self):
-        """⏹ 정지 버튼: Controller의 현재 작업에 취소를 요청한다."""
+        """⏹ 정지 버튼: 현재 작업에 취소를 요청하고 진행 중인 AI I/O를 중단한다."""
         if self.controller.stop_current_job():
             logger.info('사용자가 작업 중지를 요청했습니다.')
             self.statusBar().showMessage('작업 취소 요청됨...')
@@ -887,9 +887,12 @@ class MainWindow(QMainWindow):
 
             def _snapshot_error(error):
                 self._set_save_buttons_busy(False)
+                self.statusBar().showMessage(f'기억/연속성 갱신 실패: {error}')
 
             def _snapshot_cancelled():
                 self._set_save_buttons_busy(False)
+                # 취소 시그널 도착 시 controller가 이미 상태 메시지를 띄운다.
+                self.statusBar().showMessage('기억/연속성 갱신이 취소되었습니다.')
 
             ok = self.controller.run_task(
                 '확정 원고 기억/연속성 갱신 중...',

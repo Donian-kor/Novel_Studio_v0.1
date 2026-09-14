@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 from PySide6.QtCore import QObject, QThreadPool, Signal, Slot
 
 from novel_studio.jobs.worker import Job, StreamJob
+from novel_studio.utils.cancellation import CancelToken
 
 
 class NovelController(QObject):
@@ -27,6 +28,7 @@ class NovelController(QObject):
         self._current_chapter = 1
         self._services: dict[str, Any] = {}
         self._active_stream_callback: Optional[Callable[[str], None]] = None
+        self._cancel_token = CancelToken()
 
     def set_main_window(self, main_window) -> None:
         self.main_window = main_window
@@ -46,6 +48,18 @@ class NovelController(QObject):
             "continuity", "writing", "memory", "export",
         ):
             setattr(self, f"{name}_service", self._services.get(name))
+        # 정지 버튼 → AI provider I/O 중단 경로를 연결한다.
+        ai_service = getattr(self, "ai_service", None)
+        if ai_service is not None and hasattr(ai_service, "set_cancel_handler"):
+            try:
+                ai_service.set_cancel_handler(
+                    lambda: self._cancel_token.is_set(),
+                    getattr(ai_service, "abort", None),
+                )
+            except Exception:
+                pass
+        # 일부 배선 오류에 대비해 취소 검사 함수만이라도 항상 보장한다.
+        self._cancel_check = lambda: self._cancel_token.is_set()
 
     @property
     def busy(self) -> bool:
@@ -70,8 +84,21 @@ class NovelController(QObject):
             raise RuntimeError("이미 작업이 실행 중입니다.")
         self._busy = True
         self._current_job = job
+        # 새 작업 시작 시 이전 작업의 취소 상태를 초기화한다.
+        try:
+            self._cancel_token.reset()
+        except Exception:
+            pass
         self.status_changed.emit(label)
         self.pool.start(job)
+
+    def cancelled_check(self) -> Callable[[], bool]:
+        """현재 작업의 취소 여부를 묻는 함수(순차 AI 호출 경계에서 사용)."""
+        return lambda: bool(
+            self._busy
+            and self._current_job is not None
+            and self._cancel_token.is_set()
+        )
 
     def _finish_job_state(self) -> None:
         self._busy = False
@@ -191,11 +218,24 @@ class NovelController(QObject):
         )
 
     def stop_current_job(self) -> bool:
-        """현재 Controller 작업에 취소를 요청한다."""
+        """현재 Controller 작업에 취소를 요청한다.
+
+        취소 토큰을 세우는 동시에 진행 중인 provider 응답을 닫아,
+        블로킹 read/readline 대기도 즉시(수 초 내) 풀리게 한다.
+        """
         job = self._current_job
         if job is None or not self._busy:
             return False
         job.cancel()
+        self._cancel_token.set()
+        # 진행 중인 HTTP 응답 close (worker 스레드의 read/readline을 깨운다)
+        ai_service = getattr(self, "ai_service", None)
+        abort = getattr(ai_service, "abort", None)
+        if callable(abort):
+            try:
+                abort()
+            except Exception:
+                pass
         self.status_changed.emit("작업 취소 요청됨...")
         return True
 

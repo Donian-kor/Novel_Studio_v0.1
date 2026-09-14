@@ -2,12 +2,16 @@ import json
 import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
+from novel_studio.jobs.worker import JobCancelled
 
 TEST_TIMEOUT = 15
 CHAT_TIMEOUT = 1800
 
 
 class AnthropicProvider(AIProvider):
+    def __init__(self, config, cancel_check=None, abort_handler=None):
+        super().__init__(config, cancel_check=cancel_check, abort_handler=abort_handler)
+
     def _chat_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         key = self.config.get('api_key', '')
         model = self.config.get('model', '')
@@ -38,9 +42,9 @@ class AnthropicProvider(AIProvider):
             method='POST'
         )
         
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            d = json.loads(r.read().decode())
-        
+        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+            d = json.loads(self._read_json(r).decode())
+
         return ''.join(x.get('text', '') for x in d.get('content', []) if x.get('type') == 'text')
     
     def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
@@ -74,9 +78,19 @@ class AnthropicProvider(AIProvider):
             method='POST'
         )
         
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            for raw in r:
+        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+            while True:
+                try:
+                    raw = self._readline_cancelable(r)
+                except JobCancelled:
+                    raise
+                except Exception as e:
+                    if self._interrupted():
+                        raise JobCancelled() from e
+                    raise
                 line = raw.decode('utf-8', errors='ignore').strip()
+                if not raw:
+                    break
                 if not line.startswith('data:'):
                     continue
                 try:

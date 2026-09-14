@@ -2,12 +2,16 @@ import json
 import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
+from novel_studio.jobs.worker import JobCancelled
 
 TEST_TIMEOUT = 15
 CHAT_TIMEOUT = 1800
 
 
 class OpenAICompatibleProvider(AIProvider):
+    def __init__(self, config, cancel_check=None, abort_handler=None):
+        super().__init__(config, cancel_check=cancel_check, abort_handler=abort_handler)
+
     def _base(self): 
         return str(self.config.get('base_url', '')).rstrip('/')
     
@@ -52,9 +56,9 @@ class OpenAICompatibleProvider(AIProvider):
             method='POST'
         )
         
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            d = json.loads(r.read().decode())
-        
+        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+            d = json.loads(self._read_json(r).decode())
+
         return d['choices'][0]['message']['content']
     
     def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
@@ -82,9 +86,16 @@ class OpenAICompatibleProvider(AIProvider):
             method='POST'
         )
         
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
             while True:
-                line = r.readline().decode('utf-8', errors='ignore')
+                try:
+                    line = self._readline_cancelable(r).decode('utf-8', errors='ignore')
+                except JobCancelled:
+                    raise
+                except Exception as e:
+                    if self._interrupted():
+                        raise JobCancelled() from e
+                    raise
                 if not line:
                     break
                 line = line.strip()
@@ -133,10 +144,10 @@ class OpenAICompatibleProvider(AIProvider):
 
 
 class LMStudioProvider(OpenAICompatibleProvider):
-    def __init__(self, config):
+    def __init__(self, config, cancel_check=None, abort_handler=None):
         cfg = dict(config or {})
         # Base URL이 비어 있으면 LM Studio 기본값으로 대체한다.
         # (build_unsaved 등에서 '' 가 넘어오면 기본 localhost를 덮어써 버리는 문제 방지)
         if not (cfg.get('base_url') or '').strip():
             cfg['base_url'] = 'http://localhost:1234/v1'
-        super().__init__(cfg)
+        super().__init__(cfg, cancel_check=cancel_check, abort_handler=abort_handler)

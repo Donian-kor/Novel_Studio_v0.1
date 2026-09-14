@@ -1,5 +1,6 @@
 from hashlib import sha256
 from novel_studio.ai.prompts import summary, state, section_memory, arc_memory, entity_extract
+from novel_studio.jobs.worker import JobCancelled
 from novel_studio.utils.entity_parser import parse_entity_catalog
 
 
@@ -7,17 +8,26 @@ class MemoryManager:
     """화→구간→아크로 계층화된 장기 기억을 관리한다."""
     def __init__(self, db, ai, ledger=None): self.db, self.ai, self.ledger = db, ai, ledger
 
+    def _check_cancelled(self):
+        """순차 AI 호출 사이의 취소를 확인한다. 취소 시 즉시 중단."""
+        check = getattr(self.ai, "cancelled_check", None)
+        if callable(check) and check():
+            raise JobCancelled()
+
     def update(self, n, text, previous=''):
+        self._check_cancelled()
         previous_state = previous or ''
         if not previous_state and n > 1:
             row = self.db.chapter_state(n - 1)
             if row: previous_state = row['state'] or ''
 
         sm = self.ai.generate(summary(n, text), temperature=.25, max_tokens=4500)
+        self._check_cancelled()
         state_prompt = state(n, text)
         if previous_state:
             state_prompt += '\n\n[직전 확정 상태 - 변경점 파악용]\n' + previous_state[:8000]
         st = self.ai.generate(state_prompt, temperature=.15, max_tokens=5000)
+        self._check_cancelled()
         source_hash = sha256(text.encode('utf-8')).hexdigest()
         self.db.save_summary(n, sm, st)
         self.db.save_chapter_state(n, sm, st, source_hash)
@@ -29,6 +39,7 @@ class MemoryManager:
         # 구간/아크의 끝 화에서만 상위 기억을 갱신하여 AI 호출을 제한한다.
         sec = self.db.section_for_chapter(n)
         if sec and int(sec['end_chapter']) == int(n):
+            self._check_cancelled()
             self.update_section_memory(sec['start_chapter'], sec['end_chapter'])
             total = self.db.chapter_count() or int(sec['end_chapter'])
             for arc_no, a_start, a_end in self.db.arc_bounds(total, 5):
@@ -58,6 +69,7 @@ class MemoryManager:
             pass
 
     def update_section_memory(self, s, e):
+        self._check_cancelled()
         sums = self.db.summaries(start=s, end=e)
         states = self.db.chapter_states(start=s, end=e)
         summaries_text='\n'.join(f"[{r['chapter_number']}화] {r['summary']}" for r in sums)
@@ -71,6 +83,7 @@ class MemoryManager:
         return out
 
     def update_arc_memory(self, arc_no, s, e):
+        self._check_cancelled()
         secs=self.db.section_memories(s,e)
         text='\n'.join(f"[{r['start_chapter']}~{r['end_chapter']}화] {r['content']}" for r in secs)
         if not text:

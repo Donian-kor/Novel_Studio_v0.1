@@ -2,12 +2,16 @@ import json
 import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
+from novel_studio.jobs.worker import JobCancelled
 
 TEST_TIMEOUT = 15
 CHAT_TIMEOUT = 1800
 
 
 class GeminiProvider(AIProvider):
+    def __init__(self, config, cancel_check=None, abort_handler=None):
+        super().__init__(config, cancel_check=cancel_check, abort_handler=abort_handler)
+
     def _chat_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         key = self.config.get('api_key', '')
         model = self.config.get('model', '')
@@ -36,9 +40,9 @@ class GeminiProvider(AIProvider):
         url = self.config.get('base_url', 'https://generativelanguage.googleapis.com/v1beta').rstrip('/') + f'/models/{model}:generateContent?key={key}'
         req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
         
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            d = json.loads(r.read().decode())
-        
+        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+            d = json.loads(self._read_json(r).decode())
+
         return ''.join(p.get('text', '') for c in d.get('candidates', []) for p in c.get('content', {}).get('parts', []) if p.get('text'))
     
     def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):

@@ -25,6 +25,11 @@ class ProviderManager:
 
     def __init__(self, settings):
         self.settings = settings
+        # 정지 버튼과 연동되는 취소 훅. NovelController가 주입한다.
+        self.cancel_check = lambda: False
+        self._abort_handler = None
+        # 마지막으로 만든 provider 인스턴스(진행 중 응답 abort 대상)
+        self._active_provider = None
 
     def key(self, provider_id: str) -> str:
         if not keyring:
@@ -55,12 +60,18 @@ class ProviderManager:
 
     def _build(self, provider_id: str, config: dict):
         if provider_id == "lmstudio":
-            return LMStudioProvider(config)
-        if provider_id == "anthropic":
-            return AnthropicProvider(config)
-        if provider_id == "gemini":
-            return GeminiProvider(config)
-        return OpenAICompatibleProvider(config)
+            provider = LMStudioProvider(config)
+        elif provider_id == "anthropic":
+            provider = AnthropicProvider(config)
+        elif provider_id == "gemini":
+            provider = GeminiProvider(config)
+        else:
+            provider = OpenAICompatibleProvider(config)
+        # 정지 버튼 → 취소 신호가 이 인스턴스로 전달된다.
+        provider.cancel_check = self.cancel_check
+        provider._abort_handler = self._abort_handler
+        self._active_provider = provider
+        return provider
 
     def build_unsaved(self, provider_id: str, base_url: str, model: str, api_key: str):
         return self._build(
@@ -77,6 +88,17 @@ class ProviderManager:
             raise ValueError(f"지원하지 않는 Provider: {provider_id}")
         self.settings.data["active_provider"] = provider_id
         self.settings.save()
+
+    def set_cancel_handler(self, cancel_check, abort_handler=None) -> None:
+        """정지 버튼과 취소 훅을 연결한다(NovelController가 호출)."""
+        self.cancel_check = cancel_check or (lambda: False)
+        self._abort_handler = abort_handler
+
+    def abort(self) -> None:
+        """현재 진행 중인 provider의 HTTP 응답을 닫아 I/O를 즉시 중단한다."""
+        active = self._active_provider
+        if active is not None and hasattr(active, "abort"):
+            active.abort()
 
     def set_config(self, provider_id: str, config: dict) -> None:
         self.save_provider(

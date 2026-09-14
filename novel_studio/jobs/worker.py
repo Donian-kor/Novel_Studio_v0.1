@@ -1,3 +1,5 @@
+import threading
+
 from PySide6.QtCore import QRunnable, QObject, Signal, Slot
 
 
@@ -15,7 +17,8 @@ class Signals(QObject):
 class Job(QRunnable):
     """취소 가능한 백그라운드 작업
 
-    - cancel(): 작업 취소 요청 (협력적 취소이므로 진행 중인 I/O는 완료까지 대기)
+    - cancel(): 작업 취소 요청. 토큰을 세우고, 진행 중인 I/O는 provider가
+      토큰을 보고 연결을 끊으므로 완료까지 기다리지 않는다.
     - is_cancelled(): 취소 상태 확인
     - 취소된 작업의 결과는 무시됨
     """
@@ -25,9 +28,11 @@ class Job(QRunnable):
         self.fn = fn
         self.signals = Signals()
         self._cancelled = False
+        self._cancel_event = threading.Event()
 
     def cancel(self):
         self._cancelled = True
+        self._cancel_event.set()
 
     def is_cancelled(self) -> bool:
         return self._cancelled
@@ -43,6 +48,8 @@ class Job(QRunnable):
                 self.signals.cancelled.emit()
             else:
                 self.signals.finished.emit(result)
+        except JobCancelled:
+            self.signals.cancelled.emit()
         except Exception as e:
             if self._cancelled:
                 self.signals.cancelled.emit()

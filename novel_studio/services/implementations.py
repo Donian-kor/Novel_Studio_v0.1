@@ -111,6 +111,17 @@ class AIServiceImpl(AIService):
     def list_models(self) -> list:
         return self.ai.providers.provider().list_models()
 
+    def set_cancel_handler(self, cancel_check, abort_handler=None) -> None:
+        """정지 버튼의 취소 신호를 ProviderManager까지 전달한다."""
+        self.ai.set_cancel_handler(cancel_check, abort_handler)
+
+    def abort(self) -> None:
+        """진행 중인 provider 응답을 닫아 I/O를 즉시 중단한다."""
+        try:
+            self.ai.abort()
+        except Exception:
+            pass
+
 
 class DatabaseServiceImpl(DatabaseService):
     def __init__(self, db: Database, project_manager: ProjectManager) -> None:
