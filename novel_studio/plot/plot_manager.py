@@ -1,4 +1,5 @@
 from novel_studio.ai.prompts import master_plot, section_plan, chapter_plans
+from novel_studio.jobs.worker import JobCancelled
 class PlotManager:
     def __init__(self,db,ai,project): self.db,self.ai,self.project=db,ai,project
     def generate_master(self):
@@ -49,9 +50,9 @@ class PlotManager:
         total = len(ranges)
         
         for idx, (s0, e0) in enumerate(ranges):
-            # 취소 체크
+            # 취소 체크: 부분 결과를 완료로 위장하지 않고 즉시 중단한다.
             if cancelled_check and cancelled_check():
-                break
+                raise JobCancelled()
             
             # 진행률 알림
             if progress:

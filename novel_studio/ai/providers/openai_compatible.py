@@ -3,6 +3,7 @@ import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
 from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.retry import retry_with_backoff
 
 TEST_TIMEOUT = 15
 CHAT_TIMEOUT = 1800
@@ -56,10 +57,53 @@ class OpenAICompatibleProvider(AIProvider):
             method='POST'
         )
         
-        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+        with self._open_response(self._check_urlopen(req, timeout)) as r:
             d = json.loads(self._read_json(r).decode())
 
         return d['choices'][0]['message']['content']
+
+    def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        """블로킹 chat()도 취소 가능하게: 스트림 누적을 먼저 시도한다.
+
+        ``JobCancelled``는 그대로 전파(재시도·폴백 금지)하고, 스트림 미지원
+        서버의 일반 예외일 때만 블로킹 ``_chat_impl``로 폴백한다.
+        """
+        if timeout is None:
+            timeout = CHAT_TIMEOUT
+        config = self._retry_config()
+        try:
+            return retry_with_backoff(**config)(self._chat_via_stream)(
+                messages, temperature=temperature, top_p=top_p,
+                max_tokens=max_tokens, timeout=timeout,
+            )
+        except JobCancelled:
+            raise
+        except Exception as stream_error:
+            if self._interrupted():
+                raise JobCancelled() from stream_error
+            if 'stream unsupported' in str(stream_error).lower():
+                return super().chat(
+                    messages, temperature=temperature, top_p=top_p,
+                    max_tokens=max_tokens, timeout=timeout,
+                )
+            raise
+
+    def _chat_via_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        """스트림 조각을 누적해 블로킹 chat()과 같은 문자열을 돌려준다."""
+        pieces: list = []
+        for token in self._chat_stream_impl(
+            messages, temperature=temperature, top_p=top_p,
+            max_tokens=max_tokens, timeout=timeout,
+        ):
+            if self._interrupted():
+                self.abort()
+                raise JobCancelled()
+            if token:
+                pieces.append(token)
+        if self._interrupted():
+            self.abort()
+            raise JobCancelled()
+        return ''.join(pieces)
     
     def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         """실제 스트리밍 구현 (재시도는 베이스 클래스에서 처리)"""
@@ -86,7 +130,7 @@ class OpenAICompatibleProvider(AIProvider):
             method='POST'
         )
         
-        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+        with self._open_response(self._check_urlopen(req, timeout)) as r:
             while True:
                 try:
                     line = self._readline_cancelable(r).decode('utf-8', errors='ignore')
@@ -112,12 +156,6 @@ class OpenAICompatibleProvider(AIProvider):
                 except Exception:
                     continue
 
-    def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None):
-        # 재시도 로직은 베이스 클래스의 _retry_decorator가 처리
-        return super().chat(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
-
-    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
-        return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
 
     def quick_test(self):
         """짧은 타임아웃으로 연결 테스트를 수행한다.

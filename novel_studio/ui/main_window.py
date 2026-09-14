@@ -449,9 +449,21 @@ class MainWindow(QMainWindow):
 
     def _set_left(self,on): self.left.setVisible(on); self.left_handle.setVisible(not on)
     def _set_right(self,on): self.right.setVisible(on); self.right_handle.setVisible(not on)
-    def _run(self, label, fn, done):
-        """레거시 호출 호환용 Controller 작업 위임 래퍼."""
-        return self.controller.run_task(label, fn, done)
+    def _run(self, label, fn, done, error_callback=None, cancelled_callback=None):
+        """레거시 호출 호환용 Controller 작업 위임 래퍼.
+
+        Controller가 busy면 ``run_task``가 False를 반환하는데, 기존 호출부는
+        이 값을 무시해 "설정 충돌 검사 버튼이 먹통"처럼 보였다. busy 거부는
+        상태바로 알려주고 False를 그대로 돌려준다.
+        """
+        ok = self.controller.run_task(
+            label, fn, done,
+            error_callback=error_callback,
+            cancelled_callback=cancelled_callback,
+        )
+        if not ok:
+            self.statusBar().showMessage('AI 작업 실행 중입니다. 잠시 후 다시 눌러주세요.')
+        return ok
     def _finish_job(self):
         """레거시 호환 메서드. 실제 작업 상태는 Controller가 관리한다."""
         self._busy = False
@@ -1233,12 +1245,53 @@ class MainWindow(QMainWindow):
 
         self.controller.revise_text(text, stream_callback, done_callback)
     def _refresh_long_memory(self):
-        path=self.project_root/'chapters'/f'{self.current:03d}.txt'
-        if not path.exists(): QMessageBox.information(self,'장기 기억','현재 화 원고가 없습니다.'); return
+        """장기 기억 새로고침(현재 화 기준)을 백그라운드에서 실행한다.
+
+        기존 코드는 UI 스레드에서 ``memory.update()``를 동기 실행해 수십 초간
+        창이 얼어붙고(Windows "응답 없음"), 취소도 안 먹었다. Controller 경로로
+        옮겨 정지 버튼·상태바·빈 에러창 문제를 함께 해결한다.
+        """
+        path = self.project_root / 'chapters' / f'{self.current:03d}.txt'
+        if not path.exists():
+            QMessageBox.information(self, '장기 기억', '현재 화 원고가 없습니다.')
+            return
         try:
-            sm,st=self.memory.update(self.current,path.read_text(encoding='utf-8'))
-            self.views[5].edit.setPlainText(sm+'\n\n[상태]\n'+st)
-        except Exception as e: QMessageBox.critical(self,'장기 기억 오류',str(e))
+            text = path.read_text(encoding='utf-8')
+        except Exception as e:
+            QMessageBox.critical(self, '장기 기억 오류', f'원고 읽기 실패: {e}')
+            return
+        if not text.strip():
+            QMessageBox.information(self, '장기 기억', '현재 화 원고가 비어 있습니다.')
+            return
+
+        chapter = self.current
+
+        def job():
+            prev = self.db.latest_chapter_state(chapter - 1)
+            previous_state = prev['state'] if prev else ''
+            return self.controller.memory_service.update_memory(
+                chapter, text, previous_state)
+
+        def on_done(result):
+            try:
+                sm, st = result
+            except Exception:
+                sm, st = str(result), ''
+            self.views[5].edit.setPlainText(
+                (sm or '') + '\n\n[상태]\n' + (st or ''))
+            self._update_state()
+            self.statusBar().showMessage('장기 기억 새로고침 완료')
+
+        def on_error(error):
+            message = str(error).strip() if error is not None else ''
+            QMessageBox.critical(
+                self, '장기 기억 오류', message or '장기 기억 갱신 중 오류가 발생했습니다.')
+
+        def on_cancelled():
+            self.statusBar().showMessage('장기 기억 새로고침이 취소되었습니다.')
+
+        self._run('장기 기억 새로고침 중...', job, on_done,
+                  error_callback=on_error, cancelled_callback=on_cancelled)
 
     def audit_long_form(self):
         """장편 정밀 연속성 검사를 Controller에서 실행한다."""
@@ -1248,15 +1301,46 @@ class MainWindow(QMainWindow):
             mem.edit.setPlainText(result or '검사 결과가 없습니다.')
             self.statusBar().showMessage('장편 정밀 검사 완료')
 
-        self.controller.audit_long_form(size=50, done_callback=on_done)
+        def on_error(error):
+            message = str(error).strip() if error is not None else ''
+            mem.edit.setPlainText(
+                f'장편 정밀 검사 실패: {message or "알 수 없는 오류"}')
+            self.statusBar().showMessage('장편 정밀 검사 실패')
+
+        def on_cancelled():
+            mem.edit.setPlainText('장편 정밀 검사가 취소되었습니다.')
+            self.statusBar().showMessage('장편 정밀 검사가 취소되었습니다.')
+
+        self._run('장편 정밀 연속성 검사 중...',
+                  lambda: self.controller.continuity_service.audit_long_form(
+                      size=50,
+                      progress_callback=lambda c, t, r, o: self.controller.progress_updated.emit(
+                          c, t, f'장편 정밀 검사 {r}'),
+                      cancelled_check=self.controller.cancelled_check(),
+                  ),
+                  on_done,
+                  error_callback=on_error, cancelled_callback=on_cancelled)
 
     def check_current(self):
         text = self.views[4].editor.toPlainText()
+
         def done_callback(result):
             text = getattr(result, 'message', None) or str(result)
             self.views[5].edit.setPlainText(text)
-        
-        self.controller.check_current_chapter(self.current, text, done_callback)
+            self.statusBar().showMessage('설정 충돌 검사 완료')
+
+        def on_error(error):
+            message = str(error).strip() if error is not None else ''
+            self.statusBar().showMessage(
+                f'설정 충돌 검사 실패: {message or "알 수 없는 오류"}')
+
+        def on_cancelled():
+            self.statusBar().showMessage('설정 충돌 검사가 취소되었습니다.')
+
+        self._run('AI 연속성 검사 중...', lambda: self.controller.continuity_service.check_chapter(self.current, text),
+                  lambda result: done_callback(result),
+                  error_callback=on_error, cancelled_callback=on_cancelled)
+        # Controller busy 거부는 _run이 상태바로 알린다.
     def spellcheck_current(self):
         """요청 7-1: 맞춤법 검사. py-hanspell이 있으면 사용, 없으면 AI로 대체한다."""
         t = self.views[4].editor.toPlainText()

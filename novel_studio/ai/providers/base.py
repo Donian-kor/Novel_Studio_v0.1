@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 import urllib.error
+import urllib.request
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
 from novel_studio.jobs.worker import JobCancelled
 from novel_studio.utils.retry import NETWORK_RETRY_EXCEPTIONS, retry_stream_with_backoff, retry_with_backoff
+
+# 연결 단계(첫 바이트 대기) 슬라이스. 서버가 조용해도 이 간격마다
+# 취소 토큰을 확인하므로 정지 버튼이 1~2초 안에 먹는다.
+CONNECT_SLICE_TIMEOUT = 1.0
 
 # urlopen에 timeout을 주지 않으면(None) 소켓이 무한 대기한다.
 # 정지 버튼의 abort-close가 1차 중단 수단이고, 이 기본값은 abandon 방지용 상한이다.
@@ -107,6 +113,32 @@ class AIProvider(ABC):
                     resp.close()
                 except Exception:
                     pass
+
+    def _check_urlopen(self, req, timeout):
+        """연결+첫 바이트 대기를 취소 가능하게 만든다(1초 슬라이스 재시도)."""
+        if timeout is None:
+            timeout = DEFAULT_CHAT_TIMEOUT
+        deadline = time.monotonic() + max(1.0, float(timeout))
+        last_error = None
+        while True:
+            if self._interrupted():
+                self.abort()
+                raise JobCancelled()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                if last_error is not None:
+                    raise last_error
+                raise TimeoutError('AI 서버 응답 시간 초과')
+            try:
+                return urllib.request.urlopen(
+                    req, timeout=min(CONNECT_SLICE_TIMEOUT, remaining))
+            except (TimeoutError, socket.timeout) as e:
+                last_error = e
+                continue
+            except OSError as e:
+                if self._interrupted():
+                    raise JobCancelled() from e
+                raise
 
     @contextmanager
     def _open_response(self, resp):

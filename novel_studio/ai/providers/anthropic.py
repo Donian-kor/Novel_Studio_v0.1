@@ -3,6 +3,7 @@ import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
 from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.retry import retry_with_backoff
 
 TEST_TIMEOUT = 15
 CHAT_TIMEOUT = 1800
@@ -42,10 +43,46 @@ class AnthropicProvider(AIProvider):
             method='POST'
         )
         
-        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+        with self._open_response(self._check_urlopen(req, timeout)) as r:
             d = json.loads(self._read_json(r).decode())
 
         return ''.join(x.get('text', '') for x in d.get('content', []) if x.get('type') == 'text')
+
+    def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        """Anthropic 블로킹 호출도 스트림 누적 우선 + 폴백으로 취소 가능하게."""
+        if timeout is None:
+            timeout = CHAT_TIMEOUT
+        config = self._retry_config()
+        try:
+            return retry_with_backoff(**config)(self._chat_via_stream)(
+                messages, temperature=temperature, top_p=top_p,
+                max_tokens=max_tokens, timeout=timeout,
+            )
+        except JobCancelled:
+            raise
+        except Exception:
+            if self._interrupted():
+                raise JobCancelled()
+            return super().chat(
+                messages, temperature=temperature, top_p=top_p,
+                max_tokens=max_tokens, timeout=timeout,
+            )
+
+    def _chat_via_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        pieces: list = []
+        for token in self._chat_stream_impl(
+            messages, temperature=temperature, top_p=top_p,
+            max_tokens=max_tokens, timeout=timeout,
+        ):
+            if self._interrupted():
+                self.abort()
+                raise JobCancelled()
+            if token:
+                pieces.append(token)
+        if self._interrupted():
+            self.abort()
+            raise JobCancelled()
+        return ''.join(pieces)
     
     def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         key = self.config.get('api_key', '')
@@ -78,7 +115,7 @@ class AnthropicProvider(AIProvider):
             method='POST'
         )
         
-        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+        with self._open_response(self._check_urlopen(req, timeout)) as r:
             while True:
                 try:
                     raw = self._readline_cancelable(r)
@@ -102,8 +139,8 @@ class AnthropicProvider(AIProvider):
                 if text:
                     yield text
     
-    def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None):
-        return super().chat(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
+    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
+        return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
     
     def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)

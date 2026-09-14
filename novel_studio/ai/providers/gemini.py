@@ -40,7 +40,7 @@ class GeminiProvider(AIProvider):
         url = self.config.get('base_url', 'https://generativelanguage.googleapis.com/v1beta').rstrip('/') + f'/models/{model}:generateContent?key={key}'
         req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode(), headers={'Content-Type': 'application/json'}, method='POST')
         
-        with self._open_response(urllib.request.urlopen(req, timeout=timeout)) as r:
+        with self._open_response(self._check_urlopen(req, timeout)) as r:
             d = json.loads(self._read_json(r).decode())
 
         return ''.join(p.get('text', '') for c in d.get('candidates', []) for p in c.get('content', {}).get('parts', []) if p.get('text'))

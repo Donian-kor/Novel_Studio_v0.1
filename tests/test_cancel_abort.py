@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """정지 버튼 즉시 중단: provider abort / 메모리 경계 / controller 배선 테스트."""
+import json
 import os
+import threading
+import time
 import unittest
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -180,6 +185,142 @@ class TestAIServiceAbortWiring(unittest.TestCase):
         # 취소 요청을 세우면 전달된 검사 함수가 True를 반환한다.
         controller._cancel_token.set()
         self.assertTrue(received["cancel"]())
+
+
+class TestBlockingCancel(unittest.TestCase):
+    """블로킹 chat() 경로의 정지: TTFB 대기·본문 읽기·스트림 폴백."""
+
+    def _run_http_server(self, handler_cls):
+        server = HTTPServer(('127.0.0.1', 0), handler_cls)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, f'http://127.0.0.1:{server.server_address[1]}'
+
+    def test_check_urlopen_cancelled_during_slow_ttfb(self):
+        """첫 바이트가 늦게 오는 서버에서도 정지가 3초 안에 먹는다."""
+        from novel_studio.ai.providers.openai_compatible import (
+            OpenAICompatibleProvider,
+        )
+
+        class _SlowTTFB(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get('Content-Length') or 0)
+                self.rfile.read(length)
+                time.sleep(10)  # 헤더 지연: 기존 urlopen(timeout=1800)은 10초 대기
+                body = json.dumps(
+                    {'choices': [{'message': {'content': '늦은 응답'}}]}
+                ).encode()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        server, base = self._run_http_server(_SlowTTFB)
+        try:
+            state = {'cancel': False}
+            provider = OpenAICompatibleProvider(
+                {'base_url': base, 'model': 'm'},
+                cancel_check=lambda: state['cancel'],
+            )
+
+            def _blocking_chat():
+                try:
+                    return provider._chat_impl(
+                        [{'role': 'user', 'content': 'hi'}],
+                        temperature=0.1, top_p=0.9, max_tokens=32, timeout=30,
+                    )
+                except JobCancelled:
+                    return 'cancelled'
+
+            thread = threading.Thread(target=_blocking_chat, daemon=True)
+            started = time.monotonic()
+            thread.start()
+            time.sleep(0.3)
+            state['cancel'] = True
+            provider.abort()
+            thread.join(timeout=10)
+            elapsed = time.monotonic() - started
+            self.assertFalse(thread.is_alive())
+            # 전체 timeout(30초)을 기다리지 않고 3초 안에 풀려야 한다.
+            self.assertLess(elapsed, 3.0)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_chat_prefers_cancelable_stream(self):
+        """chat()은 스트림 누적을 먼저 시도하고 같은 문자열을 돌려준다."""
+        from novel_studio.ai.providers.openai_compatible import (
+            OpenAICompatibleProvider,
+        )
+
+        provider = OpenAICompatibleProvider(
+            {'base_url': 'http://127.0.0.1:1', 'model': 'm'})
+        calls = []
+
+        def _fake_stream(messages, *, temperature, top_p, max_tokens, timeout=None):
+            calls.append('stream')
+            yield '안'
+            yield '녕'
+
+        provider._chat_stream_impl = _fake_stream
+        out = provider.chat(
+            [{'role': 'user', 'content': 'hi'}],
+            temperature=0.1, top_p=0.9, max_tokens=32, timeout=30,
+        )
+        self.assertEqual(out, '안녕')
+        self.assertEqual(calls, ['stream'])
+
+    def test_chat_falls_back_when_stream_unsupported(self):
+        """chat()은 스트림 미지원 표시일 때만 블로킹으로 폴백한다."""
+        from novel_studio.ai.providers.openai_compatible import (
+            OpenAICompatibleProvider,
+        )
+
+        provider = OpenAICompatibleProvider(
+            {'base_url': 'http://127.0.0.1:1', 'model': 'm'})
+
+        def _broken_stream(*a, **kw):
+            raise RuntimeError('stream unsupported')
+
+        provider._chat_stream_impl = _broken_stream
+        provider._chat_impl = lambda *a, **kw: '폴백 응답'
+        out = provider.chat(
+            [{'role': 'user', 'content': 'hi'}],
+            temperature=0.1, top_p=0.9, max_tokens=32, timeout=30,
+        )
+        self.assertEqual(out, '폴백 응답')
+
+    def test_chat_cancelled_during_stream_is_not_retried_as_error(self):
+        """스트림 누적 중 취소는 JobCancelled로 끝나고 재시도되지 않는다."""
+        from novel_studio.ai.providers.openai_compatible import (
+            OpenAICompatibleProvider,
+        )
+
+        state = {'cancel': False}
+        provider = OpenAICompatibleProvider(
+            {'base_url': 'http://127.0.0.1:1', 'model': 'm'},
+            cancel_check=lambda: state['cancel'],
+        )
+
+        def _slow_stream(*a, **kw):
+            yield '조각'
+            state['cancel'] = True
+            # 다음 토큰 확인 시 취소가 감지된다.
+            yield '뒤늦은 조각'
+
+        provider._chat_stream_impl = _slow_stream
+        with self.assertRaises(JobCancelled):
+            provider.chat(
+                [{'role': 'user', 'content': 'hi'}],
+                temperature=0.1, top_p=0.9, max_tokens=32, timeout=30,
+            )
 
 
 if __name__ == '__main__':
