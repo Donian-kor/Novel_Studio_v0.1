@@ -330,6 +330,11 @@ class Database:
             size=base+(1 if i<=rem else 0); end=start+size-1; out.append((i,start,end)); start=end+1
         return out
     def snapshot(self,scope): return self.conn.execute("SELECT * FROM snapshots WHERE scope=?",(scope,)).fetchone()
+    def latest_state_snapshot(self, before_or_equal=None):
+        """현재 프로젝트 DB에서 가장 최근 state:N 스냅샷을 반환한다."""
+        if before_or_equal is None:
+            return self.conn.execute("SELECT * FROM snapshots WHERE scope GLOB 'state:[0-9]*' ORDER BY CAST(substr(scope,7) AS INTEGER) DESC LIMIT 1").fetchone()
+        return self.conn.execute("SELECT * FROM snapshots WHERE scope GLOB 'state:[0-9]*' AND CAST(substr(scope,7) AS INTEGER) <= ? ORDER BY CAST(substr(scope,7) AS INTEGER) DESC LIMIT 1", (int(before_or_equal),)).fetchone()
     def save_snapshot(self,scope,content): self.execute("INSERT INTO snapshots(scope,content,updated_at) VALUES(?,?,?) ON CONFLICT(scope) DO UPDATE SET content=excluded.content,updated_at=excluded.updated_at",(scope,content,now()))
     def add_idea(self,content):
         self.execute("INSERT INTO ideas(content,created_at,used) VALUES(?,?,0)",(content,now()))
@@ -344,6 +349,9 @@ class Database:
         sql += " ORDER BY id DESC"
         if limit is not None: sql += " LIMIT ? OFFSET ?"; args.extend([int(limit),int(offset)])
         return self.conn.execute(sql,args).fetchall()
+    def continuity_for_chapter(self, chapter):
+        return self.conn.execute("SELECT * FROM continuity_checks WHERE chapter_number=? ORDER BY id DESC", (int(chapter),)).fetchall()
+
     def continuity(self): return self.conn.execute("SELECT * FROM continuity_checks ORDER BY id DESC").fetchall()
     def add_continuity(self,ch,severity,category,message,evidence=""): self.execute("INSERT INTO continuity_checks(chapter_number,severity,category,message,evidence,created_at) VALUES(?,?,?,?,?,?)",(ch,severity,category,message,evidence,now()))
     def start_job(self,typ,target,provider,model):

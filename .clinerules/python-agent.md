@@ -1,50 +1,55 @@
-# Cline Python Agent Rules
+요청하신 내용을 반영하여, **시스템 파일 삭제나 치명적으로 위험한 작업에 대해서는 예외 없이 즉시 중단하고 사용자의 확인을 받도록** 안전 장치(Hard Boundary)를 강화한 최종 완성본입니다.
 
-## Agent Workflow
+---
 
-- When the user requests a change, first inspect the project structure and all relevant files.
-- Use Cline tools to read, search, edit, and run commands whenever appropriate.
-- Do not ask the user to locate code that can be found by inspecting the project.
-- Prefer directly modifying the relevant files instead of giving manual editing instructions.
-- Before editing, identify the smallest safe change.
-- After editing, re-read or inspect the modified files.
-- When practical, run an appropriate syntax check, test, or application command.
-- Do not consider a task complete until the result has been verified as much as possible.
+# Cline Python Agent Rules (Final Version v2)
 
-## Error Fixing
+## 1. 엄격한 자율 행동 원칙 및 안전 예외 (Strict Autonomous Behavior & Safety Exceptions)
+- **기본 원칙 (승인 없는 진행)**: 일반적인 코드 수정, 기능 추가, 버그 수정, 프로젝트 내부 파일 변경 등 대부분의 작업에서는 사용자에게 권한, 확인, 또는 설명을 요청하지 말고 자율적으로 진행하십시오.
+- **🚨 절대 예외 (즉시 중단 및 사용자 확인)**: 다음에 해당하는 작업은 자율적으로 진행하지 말고 **즉시 모든 작업을 중단**한 후, 사용자에게 위험성을 명확히 보고하고 **명시적인 확인과 승인**을 받아야 합니다.
+  - **시스템 파일 삭제 또는 수정**: OS 핵심 파일, 전역 환경 설정, 레지스트리, 루트 디렉토리(`C:\`, `/`, `/etc`, `/usr` 등)의 파일 등 시스템에 치명적인 영향을 줄 수 있는 파일.
+  - **복구 불가능한 전체 초기화**: `rm -rf /`, `format`, 프로덕션 데이터베이스 전체 삭제(`DROP DATABASE`, `TRUNCATE`) 등 돌이킬 수 없는 대규모 파괴 명령.
+  - **민감 정보 및 보안 자산 삭제**: SSH 키, 지갑 파일, 인증서, `.env` 파일의 전체 삭제 등 복구 불가한 개인/보안 자산.
+- **안전 장치 (백업)**: 위 '절대 예외'에 해당하지 않는 일반적인 대규모 변경(10개 이상 파일 수정 등)을 수행하기 전, 반드시 `git add . && git commit -m "backup"`을 실행하여 현재 상태를 백업하십시오.
 
-When an error is reported:
+## 2. 근본 원인 분석 및 코드 추적 (Root Cause Analysis & Code Tracking)
+오류 발생 또는 코드 변경 요청 시, **반드시 전체 실행 경로를 추적**한 후 수정해야 합니다:
+1. **직접 검사**: 완전한 오류 메시지나 요청을 읽고, 직접 관련된 코드를 검사하십시오.
+2. **체인 검사**: 초기 코드에 의해 호출되거나 연결된 모든 파일, 함수, 의존성을 추적하고 검사하십시오.
+3. **원인 격리**: 이러한 상호 연결된 요소들이 어떻게 작용하는지 이해하여 명확한 근본 원인을 파악하십시오.
+4. **엄격한 경계**: 식별된 원인이나 특정 요청과 관련이 없는 코드, 파일, 블록은 수정하지 마십시오. **임의의 정리나 관련 없는 섹션의 리팩토링을 절대 수행하지 마십시오.**
 
-1. Read the complete error message and traceback.
-2. Identify the file and code involved.
-3. Inspect related files when necessary.
-4. Determine the actual cause before changing code.
-5. Fix the cause rather than hiding the symptom.
-6. Check for side effects.
-7. Verify the result when possible.
-8. Explain the result to the user in simple Korean.
+## 3. Python 환경 및 의존성 관리 (Python Environment Awareness)
+- **환경 감지**: 작업 시작 전 프로젝트의 Python 환경(venv, conda, poetry, pipenv 등)을 자동으로 감지하고 활성화하십시오.
+- **의존성 자동 설치**: 실행 중 `ModuleNotFoundError`가 발생하면, 사용자에게 묻지 말고 `pip install` 등을 통해 누락된 패키지를 해당 환경에 자동 설치한 후 재시도하십시오.
+- **버전 호환성**: `requirements.txt` 또는 `pyproject.toml`이 있다면, 해당 명세에 맞는 버전을 설치하십시오.
 
-## Beginner-Friendly Behavior
+## 4. 에이전트 워크플로우 및 컨텍스트 관리 (Agent Workflow & Context Management)
+- **프로젝트 구조 파악**: 변경 요청 시 먼저 프로젝트 구조와 모든 관련 파일을 검사하십시오.
+- **타겟 검색 우선**: 전체 파일을 읽기보다 `grep`, `rg(ripgrep)` 등을 활용한 키워드 검색을 우선하여 컨텍스트를 효율적으로 관리하십시오.
+- **대용량 파일 처리**: 거대한 파일은 전체를 읽지 말고, 필요한 함수나 클래스 단위로만 발췌하여 읽으십시오.
+- **직접 수정**: 사용자가 코드를 찾도록 지시하지 말고, Cline 도구를 사용하여 직접 파일을 읽고, 검색하고, 편집하고, 명령을 실행하십시오.
+- **최소 변경 원칙**: 편집 전 근본 원인 분석을 바탕으로 가장 작고 안전한 변경 사항을 식별하십시오.
+- **검증**: 편집 후 수정된 파일을 다시 읽거나 검사하고, 실용적일 때 구문 검사(`python -m py_compile`), 테스트, 또는 애플리케이션 명령을 실행하십시오.
 
-- The user cannot reliably identify Python files, functions, classes, or line numbers.
-- Do not tell the user to manually search through code unless absolutely necessary.
-- If Cline can inspect or modify the file, do it directly.
-- If the user must perform an action manually, provide exact step-by-step instructions.
-- Never assume the user understands a traceback or programming terminology.
+## 5. 오류 처리 및 재시도 제한 (Error Handling & Retry Limits)
+- **자동 수정**: 오류, 버그, 예기치 않은 동작이 발생하면 보고하기 위해 멈추지 마십시오. 트레이스백을 분석하고, 원인을 찾고, 도구를 사용하여 직접 수정하십시오.
+- **재시도 제한**: 동일한 오류에 대해 **최대 3회** 수정을 시도하십시오. 3회 시도 후에도 해결되지 않으면, 무한 루프에 빠지지 말고 즉시 작업을 중단하십시오.
+- **에스컬레이션**: 재시도 제한에 도달하면 사용자에게 현재 상황, 오류 로그, 시도했던 방법들을 요약하여 보고하십시오.
 
-## Large or Risky Changes
+## 6. 테스트 및 검증 절차 (Strict Verification)
+- **기존 테스트 실행**: 프로젝트에 기존 테스트 코드(`pytest`, `unittest` 등)가 있다면, 수정 후 반드시 관련 테스트를 실행하여 회귀 버그(Regression)가 없음을 확인하십시오.
+- **재현 스크립트 작성**: 테스트 코드가 없는 경우, 수정 사항을 검증할 수 있는 최소 재현 스크립트(Minimal Reproduction Script)를 작성하여 실행해 보십시오.
+- **완료 조건**: 결과를 최대한 검증할 수 있을 때까지 작업을 완료된 것으로 간주하지 마십시오.
 
-- Before destructive or large-scale changes, clearly explain what will be changed and why.
-- Be especially careful with file deletion, project restructuring, dependency changes, database/data changes, and major UI changes.
-- Do not perform unrelated cleanup during a requested fix.
+## 7. 초보자 배려 및 커뮤니케이션 (Beginner-Friendly Behavior)
+- **사용자 능력 고려**: 사용자는 Python 파일, 함수, 클래스, 또는 라인 번호를 신뢰할 수 있게 식별하지 못할 수 있습니다.
+- **직접 수행**: Cline이 파일을 검사하거나 수정할 수 있다면, 직접적이고 조용하게 수행하십시오.
+- **수동 작업 최소화**: 사용자가 수동으로 작업을 수행해야 하는 경우, 최종 보고에서만 정확한 단계별 지침을 제공하십시오.
 
-## Completion
-
-After completing a task, report briefly:
-
-- What was changed
-- Which files were changed
-- Whether the change was tested
-- What the user should do next
-
-# test
+## 8. 완료 및 보고 (Completion & Reporting)
+전체 작업을 성공적으로 완료한 후(또는 1번 규칙에 의해 사용자 확인이 필요하여 중단한 후), **간단한 한국어**로 다음 사항을 보고하십시오:
+- 변경된 내용 (또는 중단 및 확인이 필요한 위험한 작업 내용)
+- 변경된 파일 목록
+- 변경 사항 테스트 여부
+- 사용자가 수행해야 할 다음 단계 (수동 작업이나 위험 작업에 대한 승인 요청이 필요한 경우)

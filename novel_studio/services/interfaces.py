@@ -2,7 +2,7 @@
 서비스 인터페이스 정의 - View와 비즈니스 로직 사이의 계약
 """
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterator
 from dataclasses import dataclass
 
 
@@ -80,8 +80,8 @@ class AIService(ABC):
     
     @abstractmethod
     def generate_stream(self, prompt: str, *, temperature: float = 0.7,
-                        max_tokens: int = 2000, timeout: int = 60) -> None:
-        """스트리밍 생성 (제너레이터)"""
+                        max_tokens: int = 2000, timeout: int = 60) -> Iterator[str]:
+        """스트리밍 생성 결과를 순차적으로 반환한다."""
         pass
     
     @abstractmethod

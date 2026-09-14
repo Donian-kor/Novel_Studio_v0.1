@@ -244,13 +244,13 @@ class EntitiesView(BaseView):
     def _rows(self, cat):
         db = self.w.db
         if cat == '인물':
-            return [('char', r['name'], dict(r)) for r in db.characters()]
+            return [('char', r['name'], {**dict(r), '_old_name': r['name']}) for r in db.characters()]
         if cat in ('세력', '장소'):
-            return [('world', r['name'], dict(r)) for r in db.world_entities(category=cat)]
+            return [('world', r['name'], {**dict(r), '_old_name': r['name']}) for r in db.world_entities(category=cat)]
         if cat == '복선':
-            return [('fore', r['code'] or r['title'], dict(r)) for r in db.foreshadows()]
+            return [('fore', r['code'] or r['title'], {**dict(r), '_old_code': r['code']}) for r in db.foreshadows()]
         if cat == '핵심 사건':
-            return [('major', r['title'], dict(r)) for r in db.major_events()]
+            return [('major', r['title'], {**dict(r), '_old_title': r['title']}) for r in db.major_events()]
         return [('time', f"{r['chapter_number'] or '-'}화 {r['title']}", dict(r)) for r in db.timeline()]
 
     def _display_name(self, row):
@@ -290,80 +290,79 @@ class EntitiesView(BaseView):
         if not getattr(self, '_cache', None):
             return False
 
+        if not (0 <= self._selected_index < len(self._cache)):
+            return False
+
         cat = self.catCombo.currentText()
         db = self.w.db
-        saved_count = 0
+        kind, label, row = self._cache[self._selected_index]
 
         try:
-            for i, (kind, label, row) in enumerate(self._cache):
-                if self.nameEdit:
-                    row['name'] = self.nameEdit.text().strip()
-
-                if i == self._selected_index:
-                    for key, widget in self._field_widgets.items():
-                        if isinstance(widget, QSpinBox):
-                            row[key] = widget.value() if widget.value() else None
-                        elif isinstance(widget, QTextEdit):
-                            row[key] = widget.toPlainText()
-                        else:
-                            row[key] = widget.text()
-
-                if kind == 'char':
-                    if not row.get('name'):
-                        continue
-                    old = row.get('_old_name', row['name'])
-                    if old and old != row['name']:
-                        db.delete_character(old)
-                    db.save_character(row)
-                    saved_count += 1
-                elif kind == 'world':
-                    if not row.get('name'):
-                        continue
-                    old = row.get('_old_name', row['name'])
-                    if old and old != row['name']:
-                        db.delete_world(old)
-                    db.save_world(row)
-                    saved_count += 1
-                elif kind == 'fore':
-                    code = row.get('code') or row.get('title')
-                    if not code:
-                        continue
-                    old = row.get('_old_code', row.get('code'))
-                    if old and old != code:
-                        db.delete_foreshadow(old)
-                    db.save_foreshadow(row)
-                    saved_count += 1
-                elif kind == 'major':
-                    title = row.get('title')
-                    if not title:
-                        continue
-                    old = row.get('_old_title', row.get('title'))
-                    if old and old != title:
-                        db.delete_major_event(old)
-                    db.save_major_event(row)
-                    saved_count += 1
+            if self.nameEdit and kind in ('char', 'world'):
+                row['name'] = self.nameEdit.text().strip()
+            for key, widget in self._field_widgets.items():
+                if isinstance(widget, QSpinBox):
+                    row[key] = widget.value() if widget.value() else None
+                elif isinstance(widget, QTextEdit):
+                    row[key] = widget.toPlainText()
                 else:
-                    row_id = row.get('id')
-                    if not row_id:
-                        continue
-                    db.execute(
-                        'UPDATE timeline_events SET title=?, description=?, chapter_number=?, story_date=?, location=?, participants=? WHERE id=?',
-                        (
-                            row.get('title', ''),
-                            row.get('description', ''),
-                            row.get('chapter_number'),
-                            row.get('story_date', ''),
-                            row.get('location', ''),
-                            row.get('participants', ''),
-                            row_id,
-                        )
+                    row[key] = widget.text()
+
+            if kind == 'char':
+                if not row.get('name'):
+                    return False
+                old = row.get('_old_name', row['name'])
+                if old and old != row['name']:
+                    db.delete_character(old)
+                db.save_character(row)
+                saved_label = row['name']
+            elif kind == 'world':
+                if not row.get('name'):
+                    return False
+                old = row.get('_old_name', row['name'])
+                if old and old != row['name']:
+                    db.delete_world(old)
+                db.save_world(row)
+                saved_label = row['name']
+            elif kind == 'fore':
+                code = row.get('code') or row.get('title')
+                if not code:
+                    return False
+                old = row.get('_old_code') or code
+                if old and old != code:
+                    db.delete_foreshadow(old)
+                db.save_foreshadow(row)
+                saved_label = code
+            elif kind == 'major':
+                title = row.get('title')
+                if not title:
+                    return False
+                old = row.get('_old_title') or title
+                if old and old != title:
+                    db.delete_major_event(old)
+                db.save_major_event(row)
+                saved_label = title
+            else:
+                row_id = row.get('id')
+                if not row_id:
+                    return False
+                db.execute(
+                    'UPDATE timeline_events SET title=?, description=?, chapter_number=?, story_date=?, location=?, participants=? WHERE id=?',
+                    (
+                        row.get('title', ''),
+                        row.get('description', ''),
+                        row.get('chapter_number'),
+                        row.get('story_date', ''),
+                        row.get('location', ''),
+                        row.get('participants', ''),
+                        row_id,
                     )
-                    saved_count += 1
+                )
+                saved_label = row.get('title', '')
 
             self.refresh()
-
             if not quiet:
-                QMessageBox.information(self.w, '저장 완료', f'현재 카테고리의 {saved_count}개 항목을 저장했습니다.')
+                QMessageBox.information(self.w, '저장 완료', f'[{cat}] {saved_label} 항목을 저장했습니다.')
             return True
 
         except Exception as e:
@@ -406,7 +405,7 @@ class EntitiesView(BaseView):
         master = self._master()
         if not master:
             return
-        total = int(self.w.pm.settings.get('target_chapters', 500) or 500)
+        total = int(self.w.pm.settings['target_chapters'])
         self.w._run(
             f'마스터 기획에서 {cat} 자동 추출/보완 중...',
             lambda: self.w.ai.generate(entity_catalog_prompt(cat, master, total), temperature=.35, max_tokens=12000),

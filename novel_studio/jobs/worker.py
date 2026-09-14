@@ -1,6 +1,10 @@
 from PySide6.QtCore import QRunnable, QObject, Signal, Slot
 
 
+class JobCancelled(Exception):
+    """스트리밍 작업을 즉시 중단하기 위한 내부 예외."""
+
+
 class Signals(QObject):
     finished = Signal(object)
     error = Signal(str)
@@ -61,6 +65,8 @@ class StreamJob(Job):
         collected = []
 
         def on_token(t):
+            if self._cancelled:
+                raise JobCancelled()
             if not t:
                 return
             collected.append(t)
@@ -72,6 +78,8 @@ class StreamJob(Job):
                 self.signals.cancelled.emit()
             else:
                 self.signals.finished.emit(total)
+        except JobCancelled:
+            self.signals.cancelled.emit()
         except Exception as e:
             if self._cancelled:
                 self.signals.cancelled.emit()

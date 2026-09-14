@@ -10,9 +10,7 @@ class PlotManager:
     def generate_chapter_plans(self,s,e):
         c=self.db.get_contract(); secs=self.db.sections_overlapping(s,e); text='\n\n'.join(r['content'] for r in secs); state='\n'.join(r['snapshot'] for r in secs); return self.ai.generate(chapter_plans(text,c['content'] if c else '',s,e,state),temperature=.55,max_tokens=16000)
     
-    def ranges(self):
-        total=int(self.project.settings['target_chapters']); size=int(self.project.settings.get('section_size',5)); return [(s,min(s+size-1,total)) for s in range(1,total+1,size)]
-    
+            
     def ranges_by_size(self,size=25):
         total=int(self.project.settings['target_chapters']); size=max(1,int(size)); return [(s,min(s+size-1,total)) for s in range(1,total+1,size)]
     
@@ -59,9 +57,29 @@ class PlotManager:
             if progress:
                 progress(idx + 1, total, f'{s0}~{e0}화', '')
             
-            secs = self.db.sections_overlapping(s0, e0)
-            source = '\n'.join(r['content'] for r in secs)[:22000]
-            
+            source_parts = []
+            plans = self.db.chapter_plans_range(s0, e0)
+            for row in plans:
+                source_parts.append(
+                    f"[플롯 {row['chapter_number']}화] {row['title']}\n{row['content']}"
+                )
+            states = self.db.chapter_states(start=s0, end=e0)
+            for row in states:
+                source_parts.append(
+                    f"[확정 상태 {row['chapter_number']}화] {row['state']}"
+                )
+            for chapter in range(s0, e0 + 1):
+                try:
+                    text = self.project.load_chapter(chapter)
+                except Exception:
+                    text = ''
+                if text:
+                    source_parts.append(f"[본문 {chapter}화]\n{text}")
+            if not source_parts:
+                secs = self.db.sections_overlapping(s0, e0)
+                source_parts.extend(r['content'] for r in secs if r['content'])
+            source = '\n\n'.join(source_parts)[:28000]
+
             out = self.ai.generate(
                 f'{s0}~{e0}화 설정/복선/시간축 연속성 문제만 검사하라. 추측 금지.\n{source}',
                 temperature=.1, max_tokens=5000

@@ -56,3 +56,13 @@ QScrollBar:vertical, QScrollBar:horizontal {
 QFrame {
     background: transparent;
 }
+
+
+/* 현재 상태 스냅샷: 필드명과 실제 문장을 시각적으로 분리 */
+QTextBrowser#stateText {
+    border: 1px solid #5E5B57;
+    border-radius: 6px;
+    padding: 8px;
+    background: #252525;
+    color: #E8E6E3;
+}

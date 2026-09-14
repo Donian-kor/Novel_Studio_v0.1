@@ -11,6 +11,16 @@ class ProjectPaths:
     exports: Path
     temp: Path
 
+DEFAULT_PROJECT_SETTINGS = {
+    "title": "새 작품",
+    "genre": "선협",
+    "mood": "진중하고 어두운 분위기",
+    "target_chapters": 500,
+    "chapter_chars": 5000,
+    "tolerance": 300,
+    "section_size": 5,
+}
+
 class ProjectManager:
     def __init__(self):
         self.active = False
@@ -38,7 +48,22 @@ class ProjectManager:
         data = json.loads(f.read_text(encoding="utf-8"))
         self._set_paths(root)
         self.settings = data.get("settings", {})
+        self.ensure_defaults()
         self.active = True
+
+    def ensure_defaults(self):
+        """오래된 프로젝트.json에도 필요한 기본 설정값이 남아 있도록 보정한다.
+
+        기존 값을 덮어쓰지 않고, 없는 키만 DEFAULT_PROJECT_SETTINGS 값으로 채운다.
+        하나라도 보정됐으면 project.json을 다시 저장해서 다음 실행부터는 정상 상태로 만든다.
+        """
+        changed = False
+        for k, v in DEFAULT_PROJECT_SETTINGS.items():
+            if k not in self.settings:
+                self.settings[k] = v
+                changed = True
+        if changed:
+            self._save_project_json()
 
     def save_settings(self, values):
         self.settings.update(values)

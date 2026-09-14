@@ -16,8 +16,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QHBoxLayout,
-    QLabel, QListWidget, QListWidgetItem, QPlainTextEdit,
-    QPushButton, QSizePolicy, QSpacerItem, QStackedWidget,
+    QLabel, QListWidget, QListWidgetItem, QPushButton,
+    QSizePolicy, QSpacerItem, QStackedWidget, QTextBrowser,
     QVBoxLayout, QWidget)
 
 class Ui_MainWidget(object):
@@ -144,9 +144,10 @@ class Ui_MainWidget(object):
 
         self.rightLayout.addWidget(self.stateTitle)
 
-        self.stateText = QPlainTextEdit(self.rightPanel)
+        self.stateText = QTextBrowser(self.rightPanel)
         self.stateText.setObjectName(u"stateText")
-        self.stateText.setReadOnly(True)
+        self.stateText.setOpenExternalLinks(False)
+        self.stateText.setOpenLinks(False)
 
         self.rightLayout.addWidget(self.stateText)
 
