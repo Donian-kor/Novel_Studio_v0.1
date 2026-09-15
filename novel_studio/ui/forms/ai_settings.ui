@@ -1,2 +1,258 @@
-<?xml version="1.0" encoding="UTF-8"?><ui version="4.0"><class>AISettingsDialog</class><widget class="QDialog" name="AISettingsDialog"><property name="windowTitle"><string>AI / 편집기 설정</string></property><property name="minimumSize"><size><width>760</width><height>720</height></size></property><layout class="QVBoxLayout" name="l"><item><widget class="QGroupBox" name="aiBox"><property name="title"><string>AI 연결</string></property><layout class="QFormLayout" name="f"><item row="0" column="0"><widget class="QLabel" name="pLbl"><property name="text"><string>제공자</string></property></widget></item><item row="0" column="1"><widget class="QComboBox" name="provider"/></item><item row="1" column="0"><widget class="QLabel" name="urlLbl"><property name="text"><string>Base URL</string></property></widget></item><item row="1" column="1"><widget class="QLineEdit" name="urlEdit"/></item><item row="2" column="0"><widget class="QLabel" name="modelLbl"><property name="text"><string>모델</string></property></widget></item><item row="2" column="1"><widget class="QComboBox" name="modelEdit"><property name="editable"><bool>true</bool></property></widget></item><item row="3" column="0"><widget class="QLabel" name="keyLbl"><property name="text"><string>API Key</string></property></widget></item><item row="3" column="1"><widget class="QLineEdit" name="keyEdit"><property name="echoMode"><enum>QLineEdit::Password</enum></property></widget></item><item row="4" column="1"><layout class="QHBoxLayout" name="ab"><item><widget class="QPushButton" name="testBtn"><property name="text"><string>연결 테스트</string></property></widget></item><item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item></layout></item></layout></widget></item><item><widget class="QGroupBox" name="editorBox"><property name="title"><string>원고 편집기</string></property><layout class="QFormLayout" name="ef"><item row="0" column="0"><widget class="QLabel" name="fontLbl"><property name="text"><string>글꼴</string></property></widget></item><item row="0" column="1"><widget class="QFontComboBox" name="fontEdit"/></item><item row="1" column="0"><widget class="QLabel" name="sizeLbl"><property name="text"><string>글자 크기</string></property></widget></item><item row="1" column="1"><widget class="QWidget" name="fontSizePanel">
-<layout class="QHBoxLayout" name="fontSizeLayout"><item><widget class="QSlider" name="fontSpin"><property name="minimum"><number>8</number></property><property name="maximum"><number>60</number></property><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="tickPosition"><enum>QSlider::TicksBelow</enum></property><property name="tickInterval"><number>4</number></property></widget></item><item><widget class="QLabel" name="fontSizeValue"><property name="minimumSize"><size><width>55</width><height>0</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="text"><string>18 pt</string></property></widget></item></layout></widget></item><item row="2" column="0"><widget class="QLabel" name="tcLbl"><property name="text"><string>글자 색</string></property></widget></item><item row="2" column="1"><widget class="QPushButton" name="textColor"><property name="text"><string>#E8E6E3</string></property></widget></item><item row="3" column="0"><widget class="QLabel" name="bcLbl"><property name="text"><string>배경 색</string></property></widget></item><item row="3" column="1"><widget class="QPushButton" name="bgColor"><property name="text"><string>#2B2B2B</string></property></widget></item></layout></widget></item><item><widget class="QLabel" name="note"><property name="text"><string>API Key는 운영체제 보안 저장소(keyring)에 저장합니다. 글꼴/글자 크기/색상은 입력란 없이 마우스로 선택할 수 있습니다.</string></property></widget></item></layout></widget><resources/><connections/></ui>
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AISettingsDialog</class>
+ <widget class="QDialog" name="AISettingsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>845</width>
+    <height>255</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>845</width>
+    <height>255</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>AI / 편집기 설정</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout">
+   <property name="bottomMargin">
+    <number>9</number>
+   </property>
+   <property name="horizontalSpacing">
+    <number>4</number>
+   </property>
+   <property name="verticalSpacing">
+    <number>5</number>
+   </property>
+   <item row="0" column="0">
+    <widget class="QGroupBox" name="aiBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="title">
+      <string>AI 연결</string>
+     </property>
+     <layout class="QFormLayout" name="f">
+      <item row="0" column="0">
+       <widget class="QLabel" name="pLbl">
+        <property name="text">
+         <string>제공자</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="provider"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="urlLbl">
+        <property name="text">
+         <string>Base URL</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="urlEdit"/>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="modelLbl">
+        <property name="text">
+         <string>모델</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="modelEdit">
+        <property name="editable">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="keyLbl">
+        <property name="text">
+         <string>API Key</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLineEdit" name="keyEdit">
+        <property name="echoMode">
+         <enum>QLineEdit::EchoMode::Password</enum>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <layout class="QHBoxLayout" name="ab">
+        <item>
+         <widget class="QLabel" name="connStatus">
+          <property name="toolTip">
+           <string>연결 테스트에 성공하면 모델 목록을 선택할 수 있습니다.</string>
+          </property>
+          <property name="text">
+           <string>연결 안 됨</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="testBtn">
+          <property name="text">
+           <string>연결 테스트</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="saveBtn">
+          <property name="text">
+           <string>저장</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QGroupBox" name="editorBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="title">
+      <string>원고 편집기</string>
+     </property>
+     <layout class="QFormLayout" name="ef">
+      <item row="0" column="0">
+       <widget class="QLabel" name="fontLbl">
+        <property name="text">
+         <string>글꼴</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QFontComboBox" name="fontEdit"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="sizeLbl">
+        <property name="text">
+         <string>글자 크기</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <layout class="QHBoxLayout" name="fontSizeLayout">
+        <item>
+         <widget class="QSlider" name="fontSpin">
+          <property name="minimum">
+           <number>8</number>
+          </property>
+          <property name="maximum">
+           <number>60</number>
+          </property>
+          <property name="orientation">
+           <enum>Qt::Orientation::Horizontal</enum>
+          </property>
+          <property name="tickPosition">
+           <enum>QSlider::TickPosition::TicksBelow</enum>
+          </property>
+          <property name="tickInterval">
+           <number>4</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="fontSizeValue">
+          <property name="minimumSize">
+           <size>
+            <width>55</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="text">
+           <string>18 pt</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignmentFlag::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="tcLbl">
+        <property name="text">
+         <string>글자 색</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QPushButton" name="textColor">
+        <property name="text">
+         <string>#E8E6E3</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="bcLbl">
+        <property name="text">
+         <string>배경 색</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QPushButton" name="bgColor">
+        <property name="text">
+         <string>#2B2B2B</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <widget class="QCheckBox" name="endStateCheck">
+        <property name="toolTip">
+         <string>끄면 저장할 때 AI를 호출하지 않습니다. 필요할 때 [화 종료 상태]에서 직접 생성할 수 있습니다.</string>
+        </property>
+        <property name="text">
+         <string>원고 저장 후 AI로 화 종료 상태 자동 생성</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="2" column="0" colspan="2">
+    <widget class="QLabel" name="note">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="text">
+      <string>API Key는 운영체제 보안 저장소(keyring)에 저장합니다. 글꼴/글자 크기/색상은 입력란 없이 마우스로 선택할 수 있습니다.</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignTop</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

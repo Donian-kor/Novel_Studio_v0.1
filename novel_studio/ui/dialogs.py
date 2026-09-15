@@ -1,9 +1,61 @@
 from PySide6.QtWidgets import (QDialog, QMessageBox, QVBoxLayout, QWidget,
                                QFormLayout, QLineEdit, QComboBox, QSpinBox,
                                QPushButton, QLabel, QHBoxLayout, QColorDialog,
-                               QFontComboBox, QSlider, QCheckBox)
-from PySide6.QtCore import Qt
+                               QFontComboBox, QSlider)
+from PySide6.QtCore import Qt, QThread, Signal
+from pathlib import Path
 from novel_studio.ui.loader import load_ui
+# 조회 중인 모델 목록 스레드 참조. 다이얼로그가 먼저 닫혀 GC돼도
+# 실행 중인 QThread가 파괴되지 않도록 모듈 레벨에서 유지한다.
+_RUNNING_MODEL_THREADS=[]
+# 연결 테스트 스레드 참조 (위와 동일한 목적)
+_RUNNING_TEST_THREADS=[]
+
+class _ModelListThread(QThread):
+    """모델 목록을 백그라운드에서 조회한다 (설정창 오픈 블로킹 방지).
+
+    AI 서버가 꺼져 있으면 list_models()가 접속 대기/타임아웃으로 수 초 걸린다.
+    UI 스레드에서 직접 호출하면 설정창이 그 시간만큼 늦게 열리므로,
+    조회만 스레드로 돌리고 결과는 시그널로 돌려받는다.
+    """
+    got_models = Signal(int, list)  # (요청 세대, 모델 목록)
+
+    def __init__(self,pm,pid,cfg,gen,parent=None):
+        super().__init__(parent)
+        self._pm,self._pid,self._cfg,self._gen=pm,pid,cfg,gen
+
+    def run(self):
+        models=[]
+        try:
+            models=self._pm._build(self._pid,self._cfg).list_models()
+        except Exception:
+            pass  # 서버 꺼짐 등 조회 실패 → 빈 목록 (편집 가능한 콤보 유지)
+        self.got_models.emit(self._gen,models or [])
+
+class _TestThread(QThread):
+    """연결 테스트를 백그라운드에서 수행한다 (연결 테스트 클릭 시 UI 프리즈 방지).
+
+    quick_test()는 서버의 실제 응답(텍스트 생성)까지 기다린다. LM Studio가
+    꺼져 있으면 접속 실패 판정에도 수 초가 걸리고, 켜져 있어도 응답 생성
+    시간만큼 대기하므로 UI 스레드에서 직접 호출하면 설정창이 그 시간만큼
+    멈춘다. 테스트만 스레드로 돌리고 결과는 시그널로 돌려받는다.
+    """
+    done = Signal(object, str, str)  # (프로바이더 객체, 결과 문자열, 오류 메시지)
+
+    def __init__(self,pm,pid,base_url,model,api_key,parent=None):
+        super().__init__(parent)
+        self._pm,self._pid,self._base,self._model,self._key=pm,pid,base_url,model,api_key
+
+    def run(self):
+        p=None
+        try:
+            p=self._pm.build_unsaved(self._pid,self._base,self._model,self._key)
+            tester=getattr(p,'quick_test',None)
+            result=tester() if callable(tester) else p.test()
+            self.done.emit(p,str(result or ''),'')
+        except Exception as e:
+            self.done.emit(p,'',str(e))
+
 class AISettingsDialog(QDialog):
     def __init__(self,providers,settings,parent=None):
         super().__init__(parent)
@@ -13,14 +65,12 @@ class AISettingsDialog(QDialog):
         lay.addWidget(ui)
         self.ui=ui
         self.pm,self.settings=providers,settings
-        for n in ['provider','urlEdit','modelEdit','keyEdit','testBtn','saveBtn','fontEdit','fontSpin','fontSizeValue','textColor','bgColor']:
+        for n in ['provider','urlEdit','modelEdit','keyEdit','testBtn','saveBtn','fontEdit','fontSpin','fontSizeValue','textColor','bgColor','endStateCheck','connStatus']:
             setattr(self,n,ui.findChild(QWidget,n))
+        self._apply_end_state_check_style()
+        self._set_conn_status(False)
         self.ids=list(providers.IDS)
         self.provider.addItems([providers.IDS[x] for x in self.ids])
-        self.endStateCheck = QCheckBox('원고 저장 후 AI로 화 종료 상태 자동 생성')
-        self.endStateCheck.setChecked(bool(settings.data.get('editor', {}).get('auto_generate_end_state', False)))
-        self.endStateCheck.setToolTip('끄면 저장할 때 AI를 호출하지 않습니다. 필요할 때 [화 종료 상태]에서 직접 생성할 수 있습니다.')
-        lay.insertWidget(2, self.endStateCheck)
         self._load_editor_controls()
         self.provider.currentIndexChanged.connect(self.load_provider)
         self.load_provider(self.ids.index(settings.data['active_provider']))
@@ -29,29 +79,87 @@ class AISettingsDialog(QDialog):
         self.fontSpin.valueChanged.connect(lambda v: self.fontSizeValue.setText(f'{v} pt'))
         self.textColor.clicked.connect(lambda: self._pick_color(self.textColor))
         self.bgColor.clicked.connect(lambda: self._pick_color(self.bgColor))
-        self.resize(780,740)
+        t=ui.windowTitle()
+        if t:self.setWindowTitle(t)
     def load_provider(self,i):
         if not self.ids:return
         pid=self.ids[i]; c=self.pm.config(pid)
         self.urlEdit.setText(c.get('base_url',''))
         self.keyEdit.setText(c.get('api_key',''))
+        self._set_conn_status(False)  # 프로바이더 전환 시 연결 상태 초기화
+        # 모델 목록 조회는 네트워크 I/O라서 UI 스레드에서 직접 하면 창이
+        # 수 초간 멈춘다 (예: LM Studio 꺼짐 → 접속 대기). 저장된 모델만
+        # 즉시 채우고, 목록은 백그라운드 스레드로 조회해 도착 시 반영한다.
+        self._model_gen=getattr(self,'_model_gen',0)+1
+        gen=self._model_gen
         self.modelEdit.clear()
-        try:
-            provider = self.pm._build(pid, c)
-            models = provider.list_models()
-            if models:
-                self.modelEdit.addItems(models)
-        except Exception:
-            pass  # 모델 조회 실패 → 편집 가능한 빈 콤보박스 유지
-        saved_model = (c.get('model') or '').strip()
-        if saved_model:
-            idx = self.modelEdit.findText(saved_model)
-            if idx >= 0:
+        self.modelEdit.setEditText((c.get('model') or '').strip())
+        threads=getattr(self,'_model_threads',None)
+        if threads is None:
+            threads=self._model_threads=[]
+        t=_ModelListThread(self.pm,pid,c,gen)
+
+        def _cleanup():
+            if t in threads: threads.remove(t)
+            if t in _RUNNING_MODEL_THREADS: _RUNNING_MODEL_THREADS.remove(t)
+            t.deleteLater()
+        t.got_models.connect(self._apply_models)
+        t.finished.connect(_cleanup)
+        threads.append(t)
+        _RUNNING_MODEL_THREADS.append(t)
+        t.start()
+
+    def _apply_models(self,gen,models):
+        if gen!=getattr(self,'_model_gen',0):
+            return  # 프로바이더를 바꾼 뒤 늦게 도착한 이전 조회 결과는 무시
+        current=self.modelEdit.currentText().strip()
+        self.modelEdit.clear()
+        if models:
+            self.modelEdit.addItems(models)
+        if current:
+            idx=self.modelEdit.findText(current)
+            if idx>=0:
                 self.modelEdit.setCurrentIndex(idx)
             else:
-                self.modelEdit.setEditText(saved_model)
+                self.modelEdit.setEditText(current)
+        # 서버에서 실제로 모델 목록을 받아왔으면 연결된 것으로 본다
+        self._set_conn_status(bool(models))
+
+    def _set_conn_status(self,state) -> None:
+        """연결 상태 표기와 모델 목록 활성화를 함께 제어한다.
+
+        True  → 연결됨(녹색), 모델 목록 활성화
+        False → 연결 안 됨(회색), 모델 목록 비활성화
+        'fail'→ 연결 실패(빨강), 모델 목록 비활성화
+        """
+        if state is True:
+            text,color='연결됨','#27AE60'
+        elif state is False:
+            text,color='연결 안 됨','#8A8783'
         else:
-            self.modelEdit.setEditText('')
+            text,color='연결 실패','#E74C3C'
+        self.connStatus.setText(text)
+        self.connStatus.setStyleSheet(f'QLabel#connStatus {{ color: {color}; font-weight: 600; }}')
+        self.modelEdit.setEnabled(state is True)
+
+    def _apply_end_state_check_style(self) -> None:
+        """종료 상태 체크박스를 녹색 배경 + 흰색 V(체크)로 강조한다.
+
+        QSS의 ``image: url(...)``은 실행 시점 작업 디렉터리 기준으로 해석되므로,
+        .ui에 상대 경로를 넣으면 환경에 따라 그림이 사라질 수 있다.
+        그래서 이미지 경로만 절대 경로로 보정해 코드에서 적용한다.
+        """
+        svg=(Path(__file__).resolve().parent/'forms'/'check_mark.svg').as_posix()
+        self.endStateCheck.setStyleSheet(
+            'QCheckBox#endStateCheck::indicator {'
+            ' width: 24px; height: 24px;'
+            ' border: 2px solid #5E5B57; border-radius: 5px;'
+            ' background: #2B2B2B; }'
+            'QCheckBox#endStateCheck::indicator:hover { border-color: #7A7672; }'
+            f'QCheckBox#endStateCheck::indicator:checked {{'
+            f' background: #27AE60; border: 2px solid #1E8449; image: url("{svg}"); }}'
+            'QCheckBox#endStateCheck:checked { color: #27AE60; font-weight: 600; }'
+        )
 
     def _load_editor_controls(self):
         editor=self.settings.data.get('editor', {})
@@ -61,6 +169,7 @@ class AISettingsDialog(QDialog):
         self._set_color_button(self.textColor, str(editor.get('text_color','#E8E6E3')))
         self._set_color_button(self.bgColor, str(editor.get('bg_color','#2B2B2B')))
         self.fontSizeValue.setText(f'{self.fontSpin.value()} pt')
+        self.endStateCheck.setChecked(bool(editor.get('auto_generate_end_state', False)))
 
     def _set_color_button(self, button, value):
         from PySide6.QtGui import QColor
@@ -90,36 +199,59 @@ class AISettingsDialog(QDialog):
         self.settings.save()
         self.accept()
     def test(self):
-        """연결 테스트: 먼저 테스트하고 성공 시에만 저장한다.
+        """연결 테스트: 먼저 테스트하고 성공 시에만 저장한다 (논블로킹).
 
+        - 테스트는 네트워크 I/O(서버 응답 생성 대기)라서 UI 스레드에서 직접
+          실행하면 창이 수 초간 멈춘다 → 백그라운드 스레드로 실행
+        - 대기 중에는 버튼이 '테스트 중...'으로 바뀌고 비활성화됨 (중복 클릭 방지)
         - 모델란이 비어 있으면 서버의 모델 목록에서 자동 선택해 modelEdit에 채운다
-        - quick_test()는 15초 짧은 타임아웃 사용
         - 테스트 실패 시 설정이 저장되지 않음
         """
-        try:
-            pid = self.ids[self.provider.currentIndex()]
-            base_url = self.urlEdit.text().strip()
-            model = self.modelEdit.currentText().strip()
-            api_key = self.keyEdit.text().strip()
-            # 저장 전에 임시 프로바이더로 테스트
-            tmp = self.pm.build_unsaved(pid, base_url, model, api_key)
-            tester = getattr(tmp, 'quick_test', None)
-            if callable(tester):
-                result = tester()
-            else:
-                result = tmp.test()
+        if getattr(self, '_test_running', False):
+            return  # 이미 테스트 진행 중이면 중복 실행하지 않는다
+        pid = self.ids[self.provider.currentIndex()]
+        base_url = self.urlEdit.text().strip()
+        model = self.modelEdit.currentText().strip()
+        api_key = self.keyEdit.text().strip()
+        self._test_running = True
+        self.testBtn.setEnabled(False)
+        self.testBtn.setText('테스트 중...')
+        threads = getattr(self, '_test_threads', None)
+        if threads is None:
+            threads = self._test_threads = []
+        t = _TestThread(self.pm, pid, base_url, model, api_key)
+        threads.append(t)
+        _RUNNING_TEST_THREADS.append(t)
+
+        def _done(p, result, error):
+            nonlocal model  # 자동 감지 모델 반영 시 재할당
+            if t in threads:
+                threads.remove(t)
+            if t in _RUNNING_TEST_THREADS:
+                _RUNNING_TEST_THREADS.remove(t)
+            t.deleteLater()
+            self._test_running = False
+            if not self.isVisible():
+                return  # 창이 닫힌 뒤 도착한 결과는 조용히 정리만 한다
+            self.testBtn.setEnabled(True)
+            self.testBtn.setText('연결 테스트')
+            if error:
+                self._set_conn_status('fail')
+                QMessageBox.critical(self, '연결 실패', error)
+                return
             # 자동 감지된 모델이 있으면 입력란에 반영
-            detected = (tmp.config.get('model') or '').strip()
+            detected = (p.config.get('model') or '').strip() if p else ''
             if detected and not model:
                 self.modelEdit.setEditText(detected)
                 model = detected
             # 성공 시에만 저장
             self.pm.save_provider(pid, base_url, model, api_key)
             self.pm.set_active(pid)
+            self._set_conn_status(True)
             shown = f"연결 성공 (모델: {model or '자동'})\n\n{result}" if result else f"연결 성공 (모델: {model or '자동'})"
             QMessageBox.information(self, '연결 테스트', shown)
-        except Exception as e:
-            QMessageBox.critical(self, '연결 실패', str(e))
+        t.done.connect(_done)
+        t.start()
 
 
 class ProjectSettingsDialog(QDialog):

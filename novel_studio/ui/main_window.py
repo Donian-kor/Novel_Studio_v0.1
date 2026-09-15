@@ -141,6 +141,10 @@ class MainWindow(QMainWindow):
         self.right = self.ui.findChild(QFrame, 'rightPanel')
         self.left_handle = self.ui.findChild(QFrame, 'leftHandle')
         self.right_handle = self.ui.findChild(QFrame, 'rightHandle')
+        self.leftCollapse = self.ui.findChild(QPushButton, 'leftCollapse')
+        self.leftExpand = self.ui.findChild(QPushButton, 'leftExpand')
+        self.rightCollapse = self.ui.findChild(QPushButton, 'rightCollapse')
+        self.rightExpand = self.ui.findChild(QPushButton, 'rightExpand')
         self.aiStatus = self.ui.findChild(QLabel, 'aiStatus')
         self.stopBtn = self.ui.findChild(QPushButton, 'stopBtn')
 

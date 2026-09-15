@@ -184,8 +184,13 @@ class OpenAICompatibleProvider(AIProvider):
 class LMStudioProvider(OpenAICompatibleProvider):
     def __init__(self, config, cancel_check=None, abort_handler=None):
         cfg = dict(config or {})
-        # Base URL이 비어 있으면 LM Studio 기본값으로 대체한다.
-        # (build_unsaved 등에서 '' 가 넘어오면 기본 localhost를 덮어써 버리는 문제 방지)
-        if not (cfg.get('base_url') or '').strip():
-            cfg['base_url'] = 'http://localhost:1234/v1'
+        # Windows에서 'localhost'는 IPv6(::1) 접속을 먼저 시도하므로 서버가
+        # 꺼져 있을 때마다 실패 판정에 ~2초가 더 걸린다(듀얼스택 폴백 대기).
+        # 루프백 호스트는 항상 자기 자신이므로 127.0.0.1로 정규화해 즉시 판정한다.
+        url = (cfg.get('base_url') or '').strip()
+        if not url:
+            url = 'http://127.0.0.1:1234/v1'
+        else:
+            url = url.replace('://localhost:', '://127.0.0.1:')
+        cfg['base_url'] = url
         super().__init__(cfg, cancel_check=cancel_check, abort_handler=abort_handler)

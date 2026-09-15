@@ -68,6 +68,7 @@ class Ui_AIChatWidget(object):
     # setupUi
 
     def retranslateUi(self, AIChatWidget):
+        AIChatWidget.setWindowTitle(QCoreApplication.translate("AIChatWidget", u"AI \uc791\ud488 \ube44\uc11c", None))
         self.contextLabel.setText(QCoreApplication.translate("AIChatWidget", u"DB \uae30\ubc18 \uc791\ud488 \ube44\uc11c \u2014 \uc9c8\ubb38\ud558\uba74 \uc791\ud488 DB\ub97c \uac80\uc0c9\ud574\uc11c \ub2f5\ud569\ub2c8\ub2e4.", None))
         self.input.setPlaceholderText(QCoreApplication.translate("AIChatWidget", u"\uc608: \ud55c\uccad\uc758 \ud604\uc7ac \uacbd\uc9c0\uac00 \ubb50\uc57c? / 37\ud654 \uc694\uc57d\ud574\uc918. / 1\ud654 \uc368\uc918.", None))
         self.searchBtn.setText(QCoreApplication.translate("AIChatWidget", u"DB \uac80\uc0c9", None))
@@ -75,6 +76,5 @@ class Ui_AIChatWidget(object):
 #if QT_CONFIG(shortcut)
         self.sendBtn.setShortcut(QCoreApplication.translate("AIChatWidget", u"Ctrl+Return", None))
 #endif // QT_CONFIG(shortcut)
-        pass
     # retranslateUi
 
