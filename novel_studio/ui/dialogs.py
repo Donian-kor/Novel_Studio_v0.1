@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QMessageBox, QVBoxLayout, QWidget,
                                QFormLayout, QLineEdit, QComboBox, QSpinBox,
                                QPushButton, QLabel, QHBoxLayout, QColorDialog,
-                               QFontComboBox, QSlider)
+                               QFontComboBox, QSlider, QCheckBox)
 from PySide6.QtCore import Qt
 from novel_studio.ui.loader import load_ui
 class AISettingsDialog(QDialog):
@@ -17,6 +17,10 @@ class AISettingsDialog(QDialog):
             setattr(self,n,ui.findChild(QWidget,n))
         self.ids=list(providers.IDS)
         self.provider.addItems([providers.IDS[x] for x in self.ids])
+        self.endStateCheck = QCheckBox('원고 저장 후 AI로 화 종료 상태 자동 생성')
+        self.endStateCheck.setChecked(bool(settings.data.get('editor', {}).get('auto_generate_end_state', False)))
+        self.endStateCheck.setToolTip('끄면 저장할 때 AI를 호출하지 않습니다. 필요할 때 [화 종료 상태]에서 직접 생성할 수 있습니다.')
+        lay.insertWidget(2, self.endStateCheck)
         self._load_editor_controls()
         self.provider.currentIndexChanged.connect(self.load_provider)
         self.load_provider(self.ids.index(settings.data['active_provider']))
@@ -80,7 +84,8 @@ class AISettingsDialog(QDialog):
             'font_family': self.fontEdit.currentFont().family(),
             'font_size': self.fontSpin.value(),
             'text_color': self.textColor.text().strip().upper() or '#E8E6E3',
-            'bg_color': self.bgColor.text().strip().upper() or '#2B2B2B'
+            'bg_color': self.bgColor.text().strip().upper() or '#2B2B2B',
+            'auto_generate_end_state': self.endStateCheck.isChecked()
         })
         self.settings.save()
         self.accept()
@@ -139,18 +144,21 @@ class ProjectSettingsDialog(QDialog):
         self.charSpin.setValue(int(s.get('chapter_chars', 5000)))
         self.tolSpin = QSpinBox(); self.tolSpin.setRange(0, 5000)
         self.tolSpin.setValue(int(s.get('tolerance', 300)))
-        self.sectionSpin = QSpinBox(); self.sectionSpin.setRange(1, 50)
-        self.sectionSpin.setValue(int(s.get('section_size', 5)))
+        self.longStorySpin = QSpinBox(); self.longStorySpin.setRange(1, 500)
+        self.longStorySpin.setValue(int(s.get('long_story_size', 50)))
+        self.subStorySpin = QSpinBox(); self.subStorySpin.setRange(1, 100)
+        self.subStorySpin.setValue(int(s.get('sub_story_size', 10)))
         form.addRow('작품명', self.titleEdit)
         form.addRow('장르', self.genreEdit)
         form.addRow('분위기', self.moodEdit)
         form.addRow('총 화수', self.totalSpin)
         form.addRow('화당 목표 글자수', self.charSpin)
         form.addRow('허용 오차 (±글자수)', self.tolSpin)
-        form.addRow('스토리 구간 크기 (화)', self.sectionSpin)
+        form.addRow('장기 스토리 구간 크기 (화)', self.longStorySpin)
+        form.addRow('세부 스토리 구간 크기 (화)', self.subStorySpin)
         lay.addLayout(form)
         help_ = QLabel('허용 오차: AI 집필 시 목표 글자수 ± 범위 (예: 5000±300 → 4700~5300자).\n'
-                       '스토리 구간 크기: 한 구간에 묶을 화 수 (예: 5 → 1~5화, 6~10화 …).')
+                       '장기 구간과 세부 구간은 스토리 화면의 계층 크기입니다. 예: 장기 50화 + 세부 10화 → 1~50화 안에 1~10화, 11~20화 …로 구성됩니다.')
         help_.setWordWrap(True)
         lay.addWidget(help_)
         row = QHBoxLayout()
@@ -168,7 +176,9 @@ class ProjectSettingsDialog(QDialog):
             'target_chapters': self.totalSpin.value(),
             'chapter_chars': self.charSpin.value(),
             'tolerance': self.tolSpin.value(),
-            'section_size': self.sectionSpin.value(),
+            'section_size': self.subStorySpin.value(),
+            'long_story_size': self.longStorySpin.value(),
+            'sub_story_size': self.subStorySpin.value(),
         }
         self.pm.save_settings(vals)
         self.accept()

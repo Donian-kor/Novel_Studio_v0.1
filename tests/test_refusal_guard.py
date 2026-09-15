@@ -1,3 +1,6 @@
+import pytest
+
+pytest.importorskip("PySide6")
 """집필/윤문 결과가 AI 안내·거부 메시지일 때 저장을 차단하는 방어 로직 테스트.
 
 실제 발생한 사고: 3화 분량 보정(adjust)에 빈 원고가 전달되어 AI가

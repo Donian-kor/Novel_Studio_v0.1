@@ -1,3 +1,6 @@
+import pytest
+
+pytest.importorskip("PySide6")
 # -*- coding: utf-8 -*-
 """정지 버튼 즉시 중단: 취소 토큰 / 재시도 대기 / worker 회귀 테스트."""
 import os

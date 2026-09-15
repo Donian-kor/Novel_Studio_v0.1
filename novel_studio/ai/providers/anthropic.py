@@ -2,7 +2,7 @@ import json
 import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
-from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.cancellation import JobCancelled
 from novel_studio.utils.retry import retry_with_backoff
 
 TEST_TIMEOUT = 15
@@ -138,9 +138,6 @@ class AnthropicProvider(AIProvider):
                 text = delta.get('text')
                 if text:
                     yield text
-    
-    def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
-        return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
     
     def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)

@@ -7,7 +7,7 @@ import logging
 from functools import wraps
 from typing import Callable, Type, Tuple, Optional, Any
 
-from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.cancellation import JobCancelled
 
 logger = logging.getLogger(__name__)
 

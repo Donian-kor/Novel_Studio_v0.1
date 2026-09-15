@@ -109,13 +109,13 @@ class DatabaseService(ABC):
         pass
     
     @abstractmethod
-    def get_chapter_plan(self, chapter: int) -> Optional[str]:
-        """화별 플롯 조회"""
+    def get_chapter_story(self, chapter: int) -> Optional[str]:
+        """화별 스토리 조회"""
         pass
     
     @abstractmethod
-    def save_chapter_plan(self, chapter: int, title: str, content: str, status: str) -> None:
-        """화별 플롯 저장"""
+    def save_chapter_story(self, chapter: int, title: str, content: str, status: str) -> None:
+        """화별 스토리 저장"""
         pass
     
     @abstractmethod
@@ -205,25 +205,6 @@ class WritingService(ABC):
     @abstractmethod
     def adjust_length(self, text: str, target: int, tolerance: int) -> str:
         """글자 수 보정"""
-        pass
-
-
-class MemoryService(ABC):
-    """장기 기억 서비스"""
-    
-    @abstractmethod
-    def update_memory(self, chapter: int, text: str, previous_state: str) -> tuple:
-        """기억 업데이트 (요약, 상태)"""
-        pass
-    
-    @abstractmethod
-    def get_memory_notes(self) -> str:
-        """저장된 메모 조회"""
-        pass
-    
-    @abstractmethod
-    def save_memory_notes(self, notes: str) -> bool:
-        """메모 저장"""
         pass
 
 

@@ -1,5 +1,5 @@
 from novel_studio.ai.prompts import continuity
-from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.cancellation import JobCancelled
 from novel_studio.services.interfaces import ContinuityResult
 
 

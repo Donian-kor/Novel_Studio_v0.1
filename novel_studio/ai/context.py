@@ -1,4 +1,7 @@
-import tiktoken
+try:
+    import tiktoken
+except ImportError:  # optional dependency; character-based fallback keeps core usable
+    tiktoken = None
 from novel_studio.intelligence.retrieval import RetrievalEngine
 
 
@@ -17,6 +20,10 @@ class ContextManager:
             return self._tokenizer
 
         model = self._get_active_model()
+        if tiktoken is None:
+            self._tokenizer = False
+            self._tokenizer_model = model
+            return None
         try:
             # 모델별 인코딩 매핑
             if model.startswith('gpt-4') or model.startswith('gpt-3.5'):
@@ -56,6 +63,8 @@ class ContextManager:
             return 0
         try:
             tokenizer = self._get_tokenizer()
+            if tokenizer is None:
+                return max(1, len(text) // 2)
             return len(tokenizer.encode(text))
         except Exception:
             # 폴백: 근사치
@@ -77,19 +86,20 @@ class ContextManager:
             p = r['plan']
             sec = r['section']
             if p:
-                b.append(f'[CHAPTER PLAN {chapter}]\n' + p['content'][:8000])
+                b.append(f'[CURRENT CHAPTER STORY {chapter}]\n' + (p['content'] or '')[:8000])
             if sec:
-                b.append('[CURRENT STORY SECTION]\n' + sec['content'][:6000] + '\n[SECTION SNAPSHOT]\n' + (sec['snapshot'] or '')[:4500])
-            for key, label, lim in [('section_memory', 'SECTION MEMORY', 6500), ('arc_memory', 'ARC MEMORY', 7000)]:
-                row = r[key]
-                if row:
-                    b.append(f'[{label}]\n' + (row['content'] or '')[:lim])
-            recent = int(self.settings.data['ai'].get('memory_recent_chapters', 5))
-            for row in r['recent_summaries'][:recent]:
-                b.append(f"[SUMMARY {row['chapter_number']}]\n" + (row['summary'] or '')[:3000])
+                b.append('[CURRENT LONG STORY SECTION]\n' + sec['content'][:9000])
+            sub = self.db.story_subsection_for_chapter(chapter) if hasattr(self.db, 'story_subsection_for_chapter') else None
+            if sub:
+                b.append('[CURRENT SUB STORY SECTION]\n' + (sub['content'] or '')[:6500])
             prev = r['previous_state']
             if prev:
-                b.append(f"[LATEST CONFIRMED STATE {prev['chapter_number']}]\n" + (prev['state'] or '')[:9000])
+                b.append(f"[PREVIOUS CHAPTER END STATE {prev['chapter_number']}]\n" + (prev['state'] or '')[:9000])
+            recent = int(self.settings.data['ai'].get('end_state_recent_chapters', 5))
+            for row in (r.get('recent_states') or [])[:recent]:
+                if prev and int(row['chapter_number']) == int(prev['chapter_number']):
+                    continue
+                b.append(f"[RECENT END STATE {row['chapter_number']}]\n" + (row['state'] or '')[:5000])
             if chapter > 1:
                 prev_text = self.project.load_chapter(chapter - 1)
                 tail = int(self.settings.data['ai']['previous_tail_chars'])
@@ -99,8 +109,6 @@ class ContextManager:
                 b.append('[LOCAL TIMELINE]\n' + '\n'.join(f"- {x['chapter_number']}화 {x['title']}: {x['description']}" for x in r['timeline'][:30]))
             if r['events']:
                 b.append('[LOCAL EVENTS]\n' + '\n'.join(f"- {x['start_chapter']}~{x['end_chapter'] or x['start_chapter']}화 {x['title']}: {x['description']}" for x in r['events'][:20]))
-            if r.get('entity_states'):
-                b.append('[ENTITY STATE LEDGER]\n' + '\n'.join(f"- {x['kind']}:{x['entity_key']} / {x['chapter_number']}화 / {(x['state'] or '')[:1600]}" for x in r['entity_states'][:40]))
             if r.get('search'):
                 b.append('[DB SEARCH EVIDENCE]\n' + '\n'.join(f"- {label}: {row.get('content', '')}" for label, row in r['search']))
             chars, worlds, fs = r['characters'], r['world'], r['foreshadowing']

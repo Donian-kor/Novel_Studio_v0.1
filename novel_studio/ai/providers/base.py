@@ -8,7 +8,7 @@ import urllib.request
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
-from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.cancellation import JobCancelled
 from novel_studio.utils.retry import NETWORK_RETRY_EXCEPTIONS, retry_stream_with_backoff, retry_with_backoff
 
 # 연결 단계(첫 바이트 대기) 슬라이스. 서버가 조용해도 이 간격마다

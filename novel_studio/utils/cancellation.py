@@ -12,6 +12,11 @@ import threading
 from typing import Callable, Optional
 
 
+
+
+class JobCancelled(Exception):
+    """AI/백그라운드 작업의 협력적 취소를 나타내는 공용 예외."""
+
 class CancelToken:
     """스레드 안전한 취소 토큰.
 

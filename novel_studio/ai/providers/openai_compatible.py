@@ -2,7 +2,7 @@ import json
 import urllib.request
 import urllib.error
 from .base import AIProvider, ProviderError
-from novel_studio.jobs.worker import JobCancelled
+from novel_studio.utils.cancellation import JobCancelled
 from novel_studio.utils.retry import retry_with_backoff
 
 TEST_TIMEOUT = 15

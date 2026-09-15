@@ -18,7 +18,9 @@ DEFAULT_PROJECT_SETTINGS = {
     "target_chapters": 500,
     "chapter_chars": 5000,
     "tolerance": 300,
-    "section_size": 5,
+    "section_size": 10,
+    "long_story_size": 50,
+    "sub_story_size": 10,
 }
 
 class ProjectManager:
@@ -28,14 +30,28 @@ class ProjectManager:
         self.paths = None
         self.settings = {}
 
-    def create(self, root, title, genre, mood, total_chapters, chapter_chars, tolerance, section_size=5):
+    def create(
+        self,
+        *,
+        root,
+        title,
+        genre,
+        mood,
+        total_chapters,
+        chapter_chars,
+        tolerance,
+        section_size=10,
+        long_story_size=50,
+        sub_story_size=10,
+    ):
         root = Path(root)
         root.mkdir(parents=True, exist_ok=True)
         self._set_paths(root)
         self.settings = {
             "title": title, "genre": genre, "mood": mood,
             "target_chapters": int(total_chapters), "chapter_chars": int(chapter_chars),
-            "tolerance": int(tolerance), "section_size": int(section_size)
+            "tolerance": int(tolerance), "section_size": int(section_size),
+            "long_story_size": int(long_story_size), "sub_story_size": int(sub_story_size)
         }
         self._save_project_json()
         self.active = True

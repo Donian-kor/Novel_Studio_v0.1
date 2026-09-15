@@ -29,6 +29,7 @@ class NovelController(QObject):
         self._services: dict[str, Any] = {}
         self._active_stream_callback: Optional[Callable[[str], None]] = None
         self._cancel_token = CancelToken()
+        self._job_queue: list[tuple] = []
 
     def set_main_window(self, main_window) -> None:
         self.main_window = main_window
@@ -45,7 +46,7 @@ class NovelController(QObject):
         self._services = dict(services)
         for name in (
             "project", "ai", "db", "context", "settings",
-            "continuity", "writing", "memory", "export",
+            "continuity", "writing", "end_state", "export",
         ):
             setattr(self, f"{name}_service", self._services.get(name))
         # 정지 버튼 → AI provider I/O 중단 경로를 연결한다.
@@ -255,6 +256,9 @@ class NovelController(QObject):
         self.status_changed.emit("작업 취소 요청됨...")
         return True
 
+    def generate_end_state(self, chapter: int, text: str, done_callback=None, error_callback=None, cancelled_callback=None) -> bool:
+        return self._run_job("화 종료 상태 생성 중...", lambda: self.end_state_service.generate(int(chapter), text), done_callback, error_callback, cancelled_callback)
+
     # ---------- 프로젝트 ----------
     def new_project(self, path: str) -> bool:
         """StartupDialog에서 생성된 프로젝트가 유효한지 확인한다."""
@@ -360,16 +364,7 @@ class NovelController(QObject):
 
         return self._run_job("장편 정밀 연속성 검사 중...", job, done_callback)
 
-    # ---------- 기억/설정/내보내기 ----------
-    def refresh_memory(self, chapter: int, text: str, previous_state: str) -> bool:
-        def job():
-            return self.memory_service.update_memory(chapter, text, previous_state)
-
-        return self._run_job("기억 업데이트 중...", job)
-
-    def save_memory_notes(self, notes: str) -> bool:
-        return self.memory_service.save_memory_notes(notes)
-
+    # ---------- 설정/내보내기 ----------
     def get_ai_settings(self) -> dict[str, Any]:
         return self.settings_service.get_ai_settings()
 

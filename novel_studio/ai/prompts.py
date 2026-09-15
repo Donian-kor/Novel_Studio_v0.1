@@ -29,7 +29,7 @@ def section(name,master_text,target,existing=''): return f"[{name}]을 장편 �
 def contract(master_text,sections,target): return f"{target}화 작품의 장기 불변 기준인 PLAN CONTRACT를 추출하라. 마스터:{master_text}\n세부:{sections}\n[주인공 핵심][세계 핵심 법칙][핵심 비밀][핵심 유물/장치][최종 목표][최종 대립][최종 결말][불변 규칙][절대 변경 금지] 형식."
 def master_plot(master_text,contract,target): return f"{target}화 전체 마스터 플롯을 5개 내외의 큰 부로 설계하라. 마스터:{master_text}\nCONTRACT:{contract}\n각 부에 화수 범위, 목표, 성장, 갈등, 핵심 사건, 복선 진행, 반전, 결말, 다음 부 연결. 개별 화 상세는 만들지 않는다."
 def section_plan(master_plot_text,contract,start,end,previous): return f"{start}~{end}화 스토리 구간을 하나의 연결된 흐름으로 설계하라. 마스터:{master_plot_text}\nCONTRACT:{contract}\n직전 상태:{previous}\n[구간 목표][구간 시작 상태][핵심 사건 흐름][주요 인물 변화][세계 변화][복선 진행][구간 반전][구간 종료 상태][다음 구간 연결점]."
-def chapter_plans(section_text,contract,start,end,state):
+def chapter_stories(section_text,contract,start,end,state):
     return f"""{start}~{end}화의 개별 플롯을 만들어라.
 구간:{section_text}
 CONTRACT:{contract}
@@ -46,26 +46,10 @@ CONTRACT:{contract}
 첫 헤더 예시: ### 제{start}화
 제목: ..."""
 def write(ctx,ch,target,tol): return f"제{ch}화 본문을 작성하라. 목표 {target}자, 허용 {target-tol}~{target+tol}자. 대사는 위아래 한 줄씩 띄운다. 본문만 출력한다.\n{ctx}"
-def summary(ch,text): return f"제{ch}화 원고를 다음 화 집필용 기억으로 압축하라. [핵심 사건][인물 상태][경지/능력][위치][시간][소지품][관계][신규 복선][진행/회수 복선][미해결 사건]\n{text}"
-def state(ch,text): return f"제{ch}화 원고에서 실제로 변한 상태만 추출하라. 추측 금지. [주인공 상태][인물 상태 변화][경지][위치][시간][소지품][관계][신규 복선][진행 복선][회수 복선][미해결 사건]\n{text}"
-def section_memory(start,end,summaries,states):
-    return f"""{start}~{end}화 스토리 구간의 장기 기억을 압축하라.
-원고 전체를 재작성하지 말고 다음 구간 상태만 남긴다.
-[구간 목표][핵심 사건][인물 상태 변화][경지/능력 변화][세력 변화][장소/시간 변화][복선 진행/회수][미해결 문제][다음 구간 연결점]
-사실에 없는 내용은 추측하지 않는다.
-[화별 요약]
-{summaries[:14000]}
-[화별 상태]
-{states[:14000]}
-"""
 
-def arc_memory(start,end,section_memories):
-    return f"""{start}~{end}화 아크의 장기 기억을 압축하라. 아래 구간 기억만 근거로 작성한다.
-[아크 목표][핵심 전개][주인공/주요 인물 변화][세력/세계 변화][중요 복선][회수된 복선][남은 미해결][아크 결말 상태][다음 아크 연결]
-추측 금지. 작품 상태를 대표하는 변경점 중심으로 짧고 정확하게 작성한다.
-[구간 기억]
-{section_memories[:18000]}
-"""
+def state(ch,text): return f"제{ch}화 원고에서 실제로 변한 상태만 추출하라. 추측 금지. [주인공 상태][인물 상태 변화][경지][위치][시간][소지품][관계][신규 복선][진행 복선][회수 복선][미해결 사건]\n{text}"
+
+
 def chat_system(ctx): return f"당신은 작품 전용 AI 비서다. 확정된 작품 데이터와 검색 근거를 우선한다. 자료에 없으면 확인 불가라고 답한다.\n{ctx}"
 def entity_extract(ch,text):
     """화별 '상태가 변한' 인물/세력/장소만 원장에 기록하도록 추출을 요청한다."""
@@ -94,22 +78,6 @@ def entity_extra(kind, name, context_text):
     return (f'다음 설정 항목을 장편 웹소설용으로 구체적으로 작성하라. 종류:{kind} / 이름:{name}. '
             f'{guide}\n[작품 맥락]\n{context_text[:6000]}')
 
-
-def repair_chapter_plans(raw_text, start, end, missing):
-    return f"""아래 AI 응답에서 누락된 화별 플롯만 보완하라.
-요청 범위: {start}~{end}화
-누락 화: {', '.join(map(str, missing))}화
-
-출력 규칙:
-- 누락된 화만 작성한다.
-- 각 화 첫 줄은 반드시 `### 제N화`이다.
-- 둘째 줄은 반드시 `제목: 제목내용`이다.
-- 각 화에는 목표/시작 상황/핵심 사건/갈등/전환점/인물 변화/세계관 정보/복선/복선 회수/엔딩/다음 화 연결을 포함한다.
-- 코드블록과 서론/마무리 설명은 금지한다.
-
-기존 응답:
-{raw_text}
-"""
 
 
 def entity_catalog_prompt(kind, master_plan, target_chapters=500):

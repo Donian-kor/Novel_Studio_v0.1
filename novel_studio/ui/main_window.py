@@ -11,49 +11,41 @@ from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence, QIcon, QPix
 from novel_studio.ui.loader import load_ui
 from novel_studio.ui.views.planning import PlanningView
 from novel_studio.ui.views.entities import EntitiesView
-from novel_studio.ui.views.ranges import RangesView
-from novel_studio.ui.views.plots import PlotsView
+from novel_studio.ui.views.story import StoryView
 from novel_studio.ui.views.manuscript import ManuscriptView
-from novel_studio.ui.views.memory import MemoryView
+from novel_studio.ui.views.end_state import EndStateView
 from novel_studio.ui.views.chat import ChatWindow
 from novel_studio.core.project import ProjectManager
 from novel_studio.core.app_settings import AppSettings
-from novel_studio.db.threadsafe_database import ThreadSafeDatabase as Database
 from novel_studio.ai.provider_manager import ProviderManager
 from novel_studio.ai.engine import AIEngine
 from novel_studio.ai.context import ContextManager
 from novel_studio.ai.prompts import (chat_system, entity_extra, master as master_prompt,
                                      contract as contract_prompt,
-                                     master_plot as master_plot_prompt, idea as idea_prompt, repair_chapter_plans,
+                                     master_plot as master_plot_prompt, idea as idea_prompt,
                                      SECTIONS)
-from novel_studio.services.idea_service import IdeaService
-from novel_studio.planning.master_planner import MasterPlanner
 from novel_studio.plot.plot_manager import PlotManager
-from novel_studio.plot.parser import parse_chapter_plans, validate_chapter_plans
 from novel_studio.manuscript.chapter_writer import ChapterWriter
-from novel_studio.memory.memory_manager import MemoryManager
 from novel_studio.continuity.checker import ContinuityChecker
-from novel_studio.intelligence.ledger import StateLedger
 from novel_studio.intelligence.diff import MasterDiffService
 from novel_studio.ui.dialogs import AISettingsDialog, ProjectSettingsDialog
-from novel_studio.jobs.snapshot import AISnapshotStore
 from novel_studio.utils.text import count_chars, strip_ai_marks, check_spelling
 from novel_studio.controllers.novel_controller import NovelController
+from novel_studio.utils.story_parser import parse_chapter_stories
 
 logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
-    NAV=['기획','설정 DB','스토리 구간','화별 플롯','원고','기억 / 연속성']
+    NAV=['기획','설정 DB','스토리','원고','화 종료 상태']
     def __init__(self, project_root):
         super().__init__()
-        self.setWindowTitle('Novel Studio v1.4.8')
+        self.setWindowTitle('Novel Studio v1.5.1')
         self.resize(1700, 1000)
         self.project_root = Path(project_root)
         self.current = 1
         self._busy = False
         self._adjust_attempts = 0
         self._active_manuscript_job = None
-        self.ai_snapshots = AISnapshotStore(self.project_root)
         self._init_services()
         self._init_ui()
         self.chat_window = ChatWindow(self)
@@ -77,15 +69,13 @@ class MainWindow(QMainWindow):
         self.ai = bundle["ai_engine"]
         self.context = bundle["context_mgr"]
         self.plot = bundle["plot_mgr"]
-        self.ledger = bundle["ledger"]
         self.master_diff = bundle["master_diff"]
+        self.end_state = bundle["end_state"]
         self.writer = bundle["writer"]
-        self.memory = bundle["memory"]
         self.checker = bundle["checker"]
 
         # 기존 View와 호환되는 보조 객체는 동일 인스턴스를 사용한다.
-        self.idea_service = IdeaService(self.db, self.ai, self.pm)
-        self.master = MasterPlanner(self.db, self.ai, self.pm)
+        self.idea_service = bundle["idea_service"]
 
         self.controller = bundle["controller"]
         self.controller.set_main_window(self)
@@ -130,7 +120,8 @@ class MainWindow(QMainWindow):
         self.load_chapter(chapter)
     def _init_ui(self):
         self.ui=load_ui('main_window.ui'); self.setCentralWidget(self.ui); self.nav=self.ui.findChild(QListWidget,'navList'); self.stack=self.ui.findChild(QStackedWidget,'pageStack'); self.left=self.ui.findChild(QFrame,'leftPanel'); self.right=self.ui.findChild(QFrame,'rightPanel'); self.left_handle=self.ui.findChild(QFrame,'leftHandle'); self.right_handle=self.ui.findChild(QFrame,'rightHandle'); self.aiStatus=self.ui.findChild(QLabel,'aiStatus')
-        self.views=[PlanningView(self),EntitiesView(self),RangesView(self),PlotsView(self),ManuscriptView(self),MemoryView(self)]
+        self.views=[PlanningView(self), EntitiesView(self), StoryView(self), ManuscriptView(self), EndStateView(self)]
+        self.planning_view, self.entities_view, self.story_view, self.manuscript_view, self.end_state_view = self.views
         for v in self.views:self.stack.addWidget(v)
         self.nav.addItems(self.NAV); self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.stopBtn = self.ui.findChild(QPushButton, 'stopBtn')
@@ -140,7 +131,7 @@ class MainWindow(QMainWindow):
         self.ui.findChild(QPushButton,'leftCollapse').clicked.connect(lambda:self._set_left(False)); self.ui.findChild(QPushButton,'leftExpand').clicked.connect(lambda:self._set_left(True)); self.ui.findChild(QPushButton,'rightCollapse').clicked.connect(lambda:self._set_right(False)); self.ui.findChild(QPushButton,'rightExpand').clicked.connect(lambda:self._set_right(True)); self.ui.findChild(QPushButton,'settingsBtn').clicked.connect(self.open_settings); self._init_conn_test_btn(); self.ui.findChild(QPushButton,'chatBtn').clicked.connect(self.open_ai_chat); self._set_left(True); self._set_right(True); self._build_top_dashboard()
         self.saveAllBtn = self.ui.findChild(QPushButton, 'saveAllBtn')
         if self.saveAllBtn is not None:
-            # 스냅샷 생성 중 로딩 표시 후 원래 문구로 복원할 때 사용한다.
+            # 종료 상태 작업 중 로딩 표시 후 원래 문구로 복원할 때 사용한다.
             self._save_all_btn_text = self.saveAllBtn.text()
             # clicked(bool)의 불리언을 인자로 넘기지 않도록 람다로 감싼다.
             self.saveAllBtn.clicked.connect(lambda _checked=False: self.save_all())
@@ -160,15 +151,17 @@ class MainWindow(QMainWindow):
             cbo.setCurrentIndex(idx if idx >= 0 else 0)
             cbo.currentIndexChanged.connect(self._on_auto_save_changed)
             self._setup_auto_save(saved_min)
-        p=self.views[0]; p.masterBtn.clicked.connect(self.generate_master); p.diffMasterBtn.clicked.connect(self.preview_master_diff); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
-        s = self.views[1]
-        # EntitiesView는 __init__ 내부에서 add/save/del/AI 버튼을 자체 배선함
-        r=self.views[2]; r.generateBtn.clicked.connect(self.generate_sections); r.snapshotBtn.clicked.connect(self.generate_snapshot); r.saveBtn.clicked.connect(lambda: self._save_view_detail(r, '스토리 구간'))
-        pl=self.views[3]; pl.generateBtn.clicked.connect(self.generate_chapter_plans); pl.allBtn.clicked.connect(self.generate_all_chapter_plans); pl.improveBtn.clicked.connect(self.improve_plot); pl.saveBtn.clicked.connect(lambda: self._save_view_detail(pl, '화별 플롯')); pl.hierBtn.clicked.connect(self.generate_hierarchical_plots)
-        mem=self.views[5]
-        if getattr(mem,'refreshMemoryBtn',None): mem.refreshMemoryBtn.clicked.connect(self._refresh_long_memory)
-        if getattr(mem,'auditBtn',None): mem.auditBtn.clicked.connect(self.audit_long_form)
-        m=self.views[4]; m.chapterList.currentRowChanged.connect(self._on_chapter_row_changed); m.editor.textChanged.connect(self.update_count); self._wire_manuscript_buttons(m)
+        p=self.planning_view; p.masterBtn.clicked.connect(self.generate_master); p.diffMasterBtn.clicked.connect(self.preview_master_diff); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
+        story=self.story_view
+        story.generateBtn.clicked.connect(self.generate_sections)
+        story.regenerateSelectedBtn.clicked.connect(self.regenerate_selected_section)
+        story.regenerateAllBtn.clicked.connect(self.regenerate_all_sections)
+        story.generateChapterBtn.clicked.connect(self.generate_chapter_stories)
+        story.regenerateChapterBtn.clicked.connect(self.regenerate_selected_chapter_story)
+        m=self.manuscript_view; m.chapterList.currentRowChanged.connect(self._on_chapter_row_changed); m.editor.textChanged.connect(self.update_count); self._wire_manuscript_buttons(m)
+        end=self.end_state_view
+        end.generateBtn.clicked.connect(self.generate_end_state_selected)
+        end.auditBtn.clicked.connect(self.audit_long_form)
     def _save_view_detail(self, view, label):
         try:
             ok = view.save_detail()
@@ -252,7 +245,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         QMessageBox.about(
             self, 'Novel Studio 정보',
-            '<b>Novel Studio</b> v1.4.6<br><br>'
+            '<b>Novel Studio</b> v1.5.1<br><br>'
             '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
             '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
 
@@ -312,7 +305,7 @@ class MainWindow(QMainWindow):
         self._update_state()
         self._load_chapters()
         self.refresh_dashboard()
-        self.views[0].refresh()
+        self.planning_view.refresh()
         QMessageBox.information(self, '저장 완료', '프로젝트 설정이 저장되었습니다.')
 
     # ---------- 요청 4: 실시간 스트리밍 ----------
@@ -342,59 +335,28 @@ class MainWindow(QMainWindow):
             except Exception:
                 logger.exception('스트리밍 토큰 UI 반영 실패')
 
-    def _run_stream(self, label, fn, done, append=None, replace=True,
-                    snapshot_kind='ai_stream', snapshot_target=None,
-                    error_callback=None, cancelled_callback=None):
-        """스트리밍 AI 작업을 UI와 분리된 디스크 스냅샷과 함께 실행한다."""
+    def _run_stream(self, label, fn, done, append=None, replace=True, error_callback=None, cancelled_callback=None):
+        """AI 스트리밍을 Controller에 연결한다. 진행 결과는 메모리 버퍼에만 유지하고 저장은 명시적 단계에서 수행한다."""
         stream_started = False
         collected = []
-        snapshot_id = self.ai_snapshots.start(snapshot_kind, snapshot_target)
-        checkpoint_chars = 0
-
         def stream_callback(token):
-            nonlocal stream_started, checkpoint_chars
+            nonlocal stream_started
             token = str(token or '')
-            if not token:
-                return
+            if not token: return
             collected.append(token)
-            checkpoint_chars += len(token)
-            # 화면을 바꿔도 결과는 이 버퍼에 계속 남는다.
-            if checkpoint_chars >= 1200 or len(collected) == 1:
-                checkpoint_chars = 0
-                self.ai_snapshots.update(snapshot_id, ''.join(collected), target=snapshot_target)
-            if append is None:
-                return
-            if replace and not stream_started:
-                try:
-                    append.clear()
-                except Exception:
-                    pass
-                stream_started = True
-            self._append_token(append, token)
-
+            if append is not None:
+                if replace and not stream_started:
+                    try: append.clear()
+                    except Exception: pass
+                    stream_started = True
+                self._append_token(append, token)
         def on_done(result):
-            final_text = str(result if result is not None else ''.join(collected))
-            self.ai_snapshots.finish(snapshot_id, 'completed', final_text, target=snapshot_target)
-            if done:
-                done(result)
-
+            if done: done(result if result is not None else ''.join(collected))
         def on_error(error):
-            self.ai_snapshots.finish(snapshot_id, 'failed', ''.join(collected), error=str(error), target=snapshot_target)
-            if error_callback:
-                error_callback(error)
-
+            if error_callback: error_callback(error)
         def on_cancelled():
-            partial = ''.join(collected)
-            self.ai_snapshots.finish(snapshot_id, 'cancelled', partial, target=snapshot_target)
-            if cancelled_callback:
-                cancelled_callback()
-
-        ok = self.controller.run_stream(
-            label, fn, stream_callback, on_done, on_error, on_cancelled
-        )
-        if not ok:
-            self.ai_snapshots.finish(snapshot_id, 'rejected', ''.join(collected), target=snapshot_target)
-        return ok
+            if cancelled_callback: cancelled_callback()
+        return self.controller.run_stream(label, fn, stream_callback, on_done, on_error, on_cancelled)
 
     def _check_write_prereq(self):
         """요청 2: 기획/설정 없이 원고를 쓰지 못하도록 차단."""
@@ -429,8 +391,8 @@ class MainWindow(QMainWindow):
         if 'check' in mapping: mapping['check'].clicked.connect(self.check_current)
         # 저장 버튼 (원고 뷰 내부)
         # 주의: QPushButton.clicked(bool)는 첫 슬롯 인자에 False를 주입한다.
-        # save_current(update_memory=True)에 그대로 연결하면 update_memory=False가 되어
-        # 스냅샷/기억 갱신이 영원히 실행되지 않으므로 반드시 람다로 감싼다.
+        # save_current(update_end_state=True)에 그대로 연결하면 update_end_state=False가 되어
+        # 저장 옵션이 잘못 전달되지 않도록 반드시 람다로 감싼다.
         for b in m.ui.findChildren(QPushButton):
             if b.text().strip() == '저장':
                 self._save_btn_text = b.text()
@@ -477,9 +439,9 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage('실행 중인 작업이 없습니다.')
 
-    def _load_all(self): self.views[0].refresh(); self.views[1].refresh(); self.views[2].refresh(); self.views[3].refresh(); self._load_chapters(); self.load_chapter(1); self._update_ai_status(); self.refresh_dashboard()
+    def _load_all(self): self.planning_view.refresh(); self.entities_view.refresh(); self.story_view.refresh(); self._load_chapters(); self.manuscript_view.refresh(); self.load_chapter(1); self._update_ai_status(); self.refresh_dashboard()
     def _load_chapters(self):
-        v=self.views[4]
+        v=self.manuscript_view
         v.chapterList.blockSignals(True)
         try:
             v.chapterList.clear()
@@ -512,18 +474,18 @@ class MainWindow(QMainWindow):
                 self.db.add_idea(out)
             return out
         self._run_stream('AI 아이디어 생성 중...', stream, lambda t: None,
-                         append=self.views[0].ideaEdit)
+                         append=self.planning_view.ideaEdit)
     def use_idea(self):
-        t = self.views[0].ideaEdit.toPlainText().strip()
+        t = self.planning_view.ideaEdit.toPlainText().strip()
         if not t:
             QMessageBox.warning(self, '아이디어 필요', '먼저 아이디어를 입력하거나 [AI 아이디어 생성]을 눌러 생성하세요.')
             return
         self.db.use_idea(t)
         self.db.set_meta('idea', t)
         self.statusBar().showMessage('아이디어 확정 → 아래에서 [AI 마스터 기획 생성]을 눌러 계속하세요.')
-        self.views[0].refresh()
+        self.planning_view.refresh()
     def generate_master(self):
-        t=self.views[0].ideaEdit.toPlainText().strip() or self.db.get_meta('idea','')
+        t=self.planning_view.ideaEdit.toPlainText().strip() or self.db.get_meta('idea','')
         if not t: QMessageBox.warning(self,'아이디어 필요','아이디어를 먼저 입력하거나 AI로 생성하세요.'); return
         def stream(on_token):
             collected = []
@@ -542,7 +504,7 @@ class MainWindow(QMainWindow):
             return out
         self._run_stream('AI 마스터 기획 생성 중...', stream,
                          lambda _: self._after_master_saved(),
-                         append=self.views[0].masterEdit)
+                         append=self.planning_view.masterEdit)
     def sync_master_characters(self):
         """마스터 기획에서 남주/여주/조연 인물을 자동 추출해 설정 DB에 upsert한다."""
         from novel_studio.ai.prompts import entity_catalog_prompt
@@ -561,16 +523,16 @@ class MainWindow(QMainWindow):
     def _after_master_saved(self, _=None):
         try:
             n=self.sync_master_characters()
-            self.views[1].refresh()
+            self.entities_view.refresh()
             self.statusBar().showMessage(f'마스터 기획 저장 완료 · 인물 DB {n}개 자동 동기화')
         except Exception as e:
             logger.warning('마스터→인물 자동 동기화 실패: %s',e)
-            self.views[1].refresh()
+            self.entities_view.refresh()
             self.statusBar().showMessage('마스터 기획 저장 완료 · 인물 자동 동기화 실패')
 
     def preview_master_diff(self):
         old=self.db.get_plan() or ''
-        new=self.views[0].masterEdit.toPlainText()
+        new=self.planning_view.masterEdit.toPlainText()
         if not old:
             QMessageBox.information(self,'변경점 검사','기존 마스터 기획이 없습니다. 먼저 저장된 마스터 기획을 만들어 주세요.')
             return
@@ -587,14 +549,14 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self,'변경점 검사 실패',str(e))
 
     def save_master(self):
-        self.db.save_plan(self.views[0].masterEdit.toPlainText())
+        self.db.save_plan(self.planning_view.masterEdit.toPlainText())
         self._run('마스터 기획에서 인물 자동 동기화 중...', self.sync_master_characters, self._after_master_saved)
     def save_contract(self):
         current=self.db.get_contract()
         if current and current['locked']:
             QMessageBox.warning(self,'핵심 기준 잠금','잠긴 핵심 기준은 수정할 수 없습니다.'); return
-        self.db.save_contract(self.views[0].contractEdit.toPlainText(),False); self.statusBar().showMessage('핵심 기준 저장 완료')
-    def save_master_plot(self): self.db.set_meta('master_plot',self.views[0].masterPlotEdit.toPlainText()); self.statusBar().showMessage('전체 플롯 저장 완료')
+        self.db.save_contract(self.planning_view.contractEdit.toPlainText(),False); self.statusBar().showMessage('핵심 기준 저장 완료')
+    def save_master_plot(self): self.db.set_meta('master_plot',self.planning_view.masterPlotEdit.toPlainText()); self.statusBar().showMessage('전체 플롯 저장 완료')
     def generate_contract(self):
         if not self.db.get_plan(): return
         txt = '\n\n'.join(f'[{s}]\n{self.db.section_content(s)}' for s in SECTIONS)
@@ -612,15 +574,15 @@ class MainWindow(QMainWindow):
                 self.db.save_contract(out, False)
             return out
         self._run_stream('장편 핵심 기준 추출 중...', stream, lambda _: None,
-                         append=self.views[0].contractEdit)
+                         append=self.planning_view.contractEdit)
     def lock_contract(self):
-        text=self.views[0].contractEdit.toPlainText().strip()
+        text=self.planning_view.contractEdit.toPlainText().strip()
         if not text:
             QMessageBox.warning(self,'핵심 기준 필요','잠글 내용이 없습니다.')
             return
         self.db.save_contract(text,True)
-        self.views[0].contractEdit.setReadOnly(True)
-        self.views[0].lockBtn.setEnabled(False)
+        self.planning_view.contractEdit.setReadOnly(True)
+        self.planning_view.lockBtn.setEnabled(False)
         self.statusBar().showMessage('핵심 기준 잠금 완료')
     def generate_master_plot(self):
         if not self.db.get_contract(): QMessageBox.warning(self,'핵심 기준 필요','먼저 핵심 기준을 추출하세요.'); return
@@ -640,170 +602,91 @@ class MainWindow(QMainWindow):
                 self.db.set_meta('master_plot', out)
             return out
         self._run_stream('AI 전체 플롯 생성 중...', stream,
-                         lambda _: self.views[0].refresh(),
-                         append=self.views[0].masterPlotEdit)
-    def _previous_section_snapshot(self, start: int) -> str:
-        """재생성 대상 바로 앞 구간의 확정 스냅샷을 반환한다."""
-        ranges = self.plot.ranges()
-        previous = None
-        for s, e in ranges:
-            if e < start:
-                previous = (s, e)
-            elif s >= start:
-                break
-        if not previous:
-            return ''
-        row = self.db.section(*previous)
-        return (row['snapshot'] or '') if row else ''
-
+                         lambda _: self.planning_view.refresh(),
+                         append=self.planning_view.masterPlotEdit)
     def _mark_downstream_sections_stale(self, start: int) -> None:
-        """선택 구간 재생성 후 뒤쪽 구간의 기존 기억이 낡았음을 표시한다."""
-        for s, e in self.plot.ranges():
-            if s <= start:
+        """선택 장기 구간 재생성 뒤의 구간을 갱신 필요 상태로 표시한다."""
+        for s, e in self.plot.long_ranges():
+            if s <= int(start):
                 continue
             row = self.db.section(s, e)
             if row and (row['content'] or '').strip():
-                self.db.save_section(s, e, '기억 갱신 필요', row['content'], row['snapshot'] or '')
+                self.db.save_section(s, e, '갱신 필요', row['content'])
 
-    def generate_sections(self, force: bool = False):
-        if not self.db.get_meta('master_plot',''): QMessageBox.warning(self,'전체 플롯 필요','먼저 전체 플롯을 생성하세요.'); return
-        def work():
-            prev=''
-            for s,e in self.plot.ranges():
-                old=self.db.section(s,e)
-                if old and old['status']=='생성완료' and not force:
-                    prev=old['snapshot'] or prev
-                    continue
-                content=self.plot.generate_story_section(s,e,prev)
-                snap=self.memory.section_snapshot(s,e,content)
-                self.db.save_section(s,e,'생성완료',content,snap)
-                prev=snap
-            return True
-        label = '스토리 구간 전체 다시 생성 중...' if force else '스토리 구간 생성/이어하기 중...'
-        return self._run(label,work,lambda _:self.views[2].refresh())
-
-    def regenerate_selected_section(self):
-        """선택한 스토리 구간만 다시 생성하고, 이후 구간은 기억 갱신 필요 상태로 표시한다."""
-        r=self.views[2].selected()
-        if not r:
-            QMessageBox.information(self,'구간 선택','먼저 다시 생성할 스토리 구간을 선택하세요.')
-            return
-        if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 전체 플롯을 생성하세요.')
-            return
-        s,e=int(r['start_chapter']),int(r['end_chapter'])
-        if QMessageBox.question(
-            self,'선택 구간 재생성',
-            f'{s}~{e}화 스토리 구간을 새로 생성합니다.\n\n현재 구간 내용은 새 결과로 교체됩니다. 계속하시겠습니까?',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        ) != QMessageBox.StandardButton.Yes:
-            return
-        previous=self._previous_section_snapshot(s)
-        def work():
-            content=self.plot.generate_story_section(s,e,previous)
-            if not (content or '').strip():
-                raise ValueError(f'{s}~{e}화 구간 생성 결과가 비어 있습니다.')
-            snap=self.memory.section_snapshot(s,e,content)
-            self.db.save_section(s,e,'생성완료',content,snap)
-            self._mark_downstream_sections_stale(s)
-            return True
-        return self._run(f'{s}~{e}화 스토리 구간 재생성 중...',work,lambda _:self.views[2].refresh())
-
-    def regenerate_all_sections(self):
-        """기존 생성 결과를 무시하고 모든 스토리 구간을 처음부터 다시 생성한다."""
-        if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 전체 플롯을 생성하세요.')
-            return
-        answer=QMessageBox.question(
-            self,'전체 스토리 구간 다시 생성',
-            '현재 생성된 모든 스토리 구간을 처음부터 다시 생성합니다.\n\n기존 구간 내용은 새 결과로 교체됩니다. 계속하시겠습니까?',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        return self.generate_sections(force=True)
-    def generate_snapshot(self):
-        r=self.views[2].selected();
-        if not r:return
-        self._run('스토리 구간 기억 갱신 중...',lambda:self.memory.section_snapshot(r['start_chapter'],r['end_chapter'],r['content']),lambda t:self.db.save_section(r['start_chapter'],r['end_chapter'],r['status'],r['content'],t) or self.views[2].refresh())
-    def _plan_ranges(self,start,end):
-        return [(s,min(e,end)) for s,e in self.plot.ranges() if not (e<start or s>end)]
-    def _generate_plans_worker(self,start,end):
-        saved = 0
-        for s,e in self._plan_ranges(start,end):
+    def _generate_subsections(self, start: int, end: int, parent_content: str) -> int:
+        made = 0
+        previous = ''
+        for ss, ee in self.plot.sub_ranges(start, end):
             if self.controller.cancel_requested:
                 break
-            out = self.plot.generate_chapter_plans(s,e)
-            plans = parse_chapter_plans(out)
-            check = validate_chapter_plans(plans, s, e)
+            text = self.plot.generate_substory_section(ss, ee, parent_content, previous)
+            if not (text or '').strip():
+                raise ValueError(f'{ss}~{ee}화 세부 스토리 생성 결과가 비어 있습니다.')
+            self.db.save_story_subsection(start, end, ss, ee, f'{ss}~{ee}화 세부 스토리', text, '생성완료')
+            previous = text
+            made += 1
+        return made
 
-            # 누락된 화만 1회 보완 생성하여 모델의 형식 흔들림을 흡수한다.
-            if not check['valid'] and check['missing']:
-                repair = self.ai.generate(repair_chapter_plans(out, s, e, check['missing']),
-                                          temperature=.30, max_tokens=9000)
-                plans.extend(parse_chapter_plans(repair))
-                # 중복은 최신 보완 결과를 우선한다.
-                merged = {}
-                for n,title,body in plans:
-                    if s <= n <= e:
-                        merged[n] = (n,title,body)
-                plans = [merged[n] for n in sorted(merged)]
-                check = validate_chapter_plans(plans, s, e)
-
-            if not check['valid']:
-                missing = ', '.join(f'{n}화' for n in check['missing']) or '없음'
-                extra = ', '.join(f'{n}화' for n in check['extra']) or '없음'
-                raise ValueError(
-                    f'{s}~{e}화 플롯을 완전히 파싱하지 못했습니다.\n'
-                    f'누락: {missing} / 범위 밖: {extra}\n\n'
-                    f'AI 원문 앞부분:\n{out[:1200]}'
-                )
-
-            for n,title,body in plans:
-                self.db.save_chapter_plan(n,title,body,'초안')
-                saved += 1
-        return saved
-
-    def generate_chapter_plans(self):
-        s,e=self.views[3].start.value(),self.views[3].end.value()
-        total=int(self.pm.settings['target_chapters'])
-        if s < 1 or e < s or e > total:
-            QMessageBox.warning(self,'화 범위 오류',f'유효한 범위는 1~{total}화입니다.')
-            return
+    def generate_sections(self, force: bool = False):
         if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 AI 전체 플롯을 생성하거나 저장하세요.')
-            return
-        relevant = [r for r in self.db.sections_overlapping(s, e) if (r['content'] or '').strip()]
-        if not relevant:
-            QMessageBox.warning(self,'스토리 구간 필요',f'{s}~{e}화에 해당하는 스토리 구간이 없습니다.\n먼저 [스토리 구간]에서 해당 구간을 생성하세요.')
-            return
-        self._run(f'{s}~{e}화 개별 플롯 생성 중...',
-                  lambda:self._generate_plans_worker(s,e),
-                  lambda n:(self.views[3].refresh(), self.statusBar().showMessage(f'{n}개 화 플롯 저장 완료')))
-
-    def generate_hierarchical_plots(self):
-        total=int(self.pm.settings['target_chapters'])
-        if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 AI 전체 플롯을 생성하거나 저장하세요.')
+            QMessageBox.warning(self,'전체 플롯 필요','먼저 전체 플롯을 생성하세요.')
             return
         def work():
-            return self.plot.generate_hierarchical_plans(25)
-        def done(results):
-            made=sum(x[2] for x in results)
-            self.views[3].refresh()
-            QMessageBox.information(self,'구간별 플롯 생성 완료',f'{len(results)}개 구간에서 {made}개 화 플롯을 처리했습니다.')
-        self._run(f'1~{total}화 구간별 플롯 생성 중...',work,done)
+            previous = ''
+            made = 0
+            for s, e in self.plot.long_ranges():
+                if self.controller.cancel_requested:
+                    break
+                old = self.db.section(s, e)
+                if old and old['status'] == '생성완료' and not force:
+                    previous = old['content'] or previous
+                    continue
+                content = self.plot.generate_story_section(s, e, previous)
+                if not (content or '').strip():
+                    raise ValueError(f'{s}~{e}화 스토리 생성 결과가 비어 있습니다.')
+                self.db.save_section(s, e, '생성완료', content, '')
+                made += self._generate_subsections(s, e, content)
+                previous = content
+            return made
+        label = '스토리 전체 다시 생성 중...' if force else '스토리 생성/이어하기 중...'
+        return self._run(label, work, lambda n: (self.story_view.refresh(), self.statusBar().showMessage(f'세부 스토리 {n}개 생성 완료')))
 
-    def generate_all_chapter_plans(self):
-        self.views[3].start.setValue(1)
-        self.views[3].end.setValue(int(self.pm.settings['target_chapters']))
-        self.generate_chapter_plans()
-    def improve_plot(self):
-        p=self.views[3].selected();
-        if not p:return
-        self._run('선택 플롯 개선 중...',lambda:self.ai.generate('기존 설정과 화별 형식을 유지하며 다음 플롯을 개선하라.\n'+p['content'],temperature=.42,max_tokens=9000),lambda t:self.db.save_chapter_plan(p['chapter_number'],p['title'],t,'초안') or self.views[3].refresh())
+    def regenerate_selected_section(self):
+        kind, row = self.story_view.selected()
+        if not row:
+            QMessageBox.information(self,'구간 선택','먼저 재생성할 스토리 구간을 선택하세요.')
+            return
+        if not self.db.get_meta('master_plot','').strip():
+            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 전체 플롯을 생성하세요.')
+            return
+        if QMessageBox.question(self,'선택 구간 재생성','선택한 스토리 구간을 새로 생성하여 기존 내용을 교체합니다. 계속하시겠습니까?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        if kind == 'long':
+            s,e = int(row['start_chapter']), int(row['end_chapter'])
+            def work():
+                content = self.plot.generate_story_section(s, e, '')
+                if not content.strip(): raise ValueError('스토리 생성 결과가 비어 있습니다.')
+                self.db.save_section(s,e,'생성완료',content)
+                return self._generate_subsections(s,e,content)
+        else:
+            s,e = int(row['start_chapter']), int(row['end_chapter'])
+            parent = self.db.section(int(row['parent_start']), int(row['parent_end']))
+            parent_content = (parent['content'] if parent else '') or ''
+            def work():
+                content = self.plot.generate_substory_section(s,e,parent_content)
+                if not content.strip(): raise ValueError('세부 스토리 생성 결과가 비어 있습니다.')
+                self.db.save_story_subsection(int(row['parent_start']),int(row['parent_end']),s,e,row['title'] or f'{s}~{e}화 세부 스토리',content,'생성완료')
+                return 1
+        return self._run('선택 스토리 구간 재생성 중...', work, lambda _: self.story_view.refresh())
+
+    def regenerate_all_sections(self):
+        if not self.db.get_meta('master_plot','').strip():
+            QMessageBox.warning(self,'전체 플롯 필요','먼저 전체 플롯을 생성하세요.')
+            return
+        if QMessageBox.question(self,'전체 스토리 다시 생성','현재 스토리 구간을 전부 새로 생성합니다. 계속하시겠습니까?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        return self.generate_sections(force=True)
+
     def _on_chapter_row_changed(self, row):
         if row < 0:
             return
@@ -818,8 +701,8 @@ class MainWindow(QMainWindow):
         self.load_chapter(target)
 
     def _save_editor_draft(self, chapter: int) -> None:
-        text = self.views[4].editor.toPlainText()
-        title = self.views[4].titleEdit.text().strip() or f'{chapter}화'
+        text = self.manuscript_view.editor.toPlainText()
+        title = self.manuscript_view.titleEdit.text().strip() or f'{chapter}화'
         self.pm.save_chapter(chapter, text)
         self.db.set_chapter_meta(
             int(chapter), title, '초안' if text.strip() else '미작성',
@@ -827,7 +710,7 @@ class MainWindow(QMainWindow):
         )
 
     def load_chapter(self,n):
-        self.current=int(n); v=self.views[4]
+        self.current=int(n); v=self.manuscript_view
         v.editor.blockSignals(True)
         active = self._active_manuscript_job
         if active and int(active.get('chapter', -1)) == self.current:
@@ -838,9 +721,9 @@ class MainWindow(QMainWindow):
         r=self.db.chapter(self.current); v.titleEdit.setText(r['title'] if r else f'{self.current}화'); self.update_count(); self._update_state()
         if hasattr(self,'chat_window'): self.chat_window.refresh(self.db.chat_messages(limit=200))
     def update_count(self):
-        t=self.views[4].editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.views[4].countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
+        t=self.manuscript_view.editor.toPlainText(); n=count_chars(t); ns=count_chars(t,True); target=int(self.pm.settings['chapter_chars']); self.manuscript_view.countLabel.setText(f'현재 {n:,}자 / 목표 {target:,}자 / 공백 포함 {ns:,}자')
     def _set_save_buttons_busy(self, busy: bool):
-        """스냅샷 생성(백그라운드 AI 작업) 동안 저장 버튼을 로딩 상태로 잠근다.
+        """종료 상태 작업 동안 저장 버튼을 로딩 상태로 잠근다.
 
         작업 완료/실패/취소 모든 경로에서 반드시 ``_set_save_buttons_busy(False)``로
         복원해야 한다. 복원하지 않으면 버튼이 영원히 비활성화 상태로 남는다.
@@ -849,10 +732,10 @@ class MainWindow(QMainWindow):
             # (버튼, 원본 문구, 로딩 문구)
             (getattr(self, 'saveAllBtn', None),
              getattr(self, '_save_all_btn_text', '전체 저장'),
-             '⏳ 스냅샷 생성 중...'),
+             '⏳ 종료 상태 작업 중...'),
             (getattr(self, '_save_btn', None),
              getattr(self, '_save_btn_text', '저장'),
-             '⏳ 스냅샷 생성 중...'),
+             '⏳ 종료 상태 작업 중...'),
         )
         for btn, default_text, busy_text in pairs:
             if btn is None:
@@ -860,133 +743,65 @@ class MainWindow(QMainWindow):
             btn.setText(busy_text if busy else default_text)
             btn.setEnabled(not busy)
 
-    def save_current(self, update_memory=True):
-        """현재 원고를 확정 저장한다. 자동 저장에서는 AI 기억 갱신을 실행하지 않는다."""
-        v = self.views[4]
+    def _generate_end_state_for_chapter(self, chapter: int, text: str):
+        return self.end_state.generate(int(chapter), text)
+
+    def save_current(self, update_end_state=None):
+        """원고는 항상 즉시 저장한다. 종료 상태 AI 생성은 별도 옵션으로 실행한다."""
+        v = self.manuscript_view
         t = v.editor.toPlainText()
         title = v.titleEdit.text().strip() or f'{self.current}화'
-        n = count_chars(t)
-        ns = count_chars(t, True)
-        target = int(self.pm.settings['chapter_chars'])
+        n = count_chars(t); ns = count_chars(t, True); target = int(self.pm.settings['chapter_chars'])
         self.pm.save_chapter(self.current, t)
-        self.db.set_chapter_meta(
-            self.current, title, '작성완료' if t.strip() else '미작성',
-            n, ns, target
-        )
+        self.db.set_chapter_meta(self.current, title, '작성완료' if t.strip() else '미작성', n, ns, target)
         self._load_chapters()
         self.statusBar().showMessage(f'{self.current}화 저장 완료')
-        if update_memory and t.strip():
-            if self.controller.busy:
-                # busy면 run_task가 error_occurred → critical 다이얼로그를 띄우므로
-                # 여기서 중복 팝업 없이 상태바로만 알린다. 원고는 이미 저장됨.
-                self.statusBar().showMessage(
-                    f'{self.current}화 저장 완료 · AI 작업 중이라 기억 갱신은 '
-                    '작업 종료 후 [저장]을 다시 눌러주세요'
-                )
-                return
-            # 스냅샷/연속성 갱신이 시작되는 순간 저장 버튼을 잠근다.
-            # 완료/실패/취소 콜백 모두에서 복원하므로 연타로 작업이 스킵되는 일이 없다.
-            self._set_save_buttons_busy(True)
+        if update_end_state is None:
+            update_end_state = bool(self.app.data.get('editor', {}).get('auto_generate_end_state', False))
+        if update_end_state and t.strip():
+            chapter = int(self.current); text = t
+            def done(result):
+                self.end_state_view.refresh(); self._update_state(); self.statusBar().showMessage(f'{chapter}화 저장 완료 · 종료 상태 생성 완료')
+            def err(error):
+                self.statusBar().showMessage(f'{chapter}화 저장 완료 · 종료 상태 생성 실패: {error}')
+            self.controller.generate_end_state(chapter, text, done_callback=done, error_callback=err)
 
-            def _snapshot_done(result):
-                try:
-                    self.views[5].edit.setPlainText(
-                        result[0][0] + '\n\n[연속성]\n' + result[1]
-                    )
-                    self._update_state()
-                finally:
-                    self._set_save_buttons_busy(False)
-
-            def _snapshot_error(error):
-                self._set_save_buttons_busy(False)
-                self.statusBar().showMessage(f'기억/연속성 갱신 실패: {error}')
-
-            def _snapshot_cancelled():
-                self._set_save_buttons_busy(False)
-                # 취소 시그널 도착 시 controller가 이미 상태 메시지를 띄운다.
-                self.statusBar().showMessage('기억/연속성 갱신이 취소되었습니다.')
-
-            ok = self.controller.run_task(
-                '확정 원고 기억/연속성 갱신 중...',
-                lambda: self._update_memory_and_continuity(self.current, t),
-                done_callback=_snapshot_done,
-                error_callback=_snapshot_error,
-                cancelled_callback=_snapshot_cancelled,
-            )
-            if not ok:
-                # 시작 직전 busy가 된 극히 드문 레이스: 잠근 버튼을 즉시 복원한다.
-                self._set_save_buttons_busy(False)
     def save_all(self, silent=False):
-        """모든 섹션의 현재 편집 내용을 DB/파일에 일괄 저장한다.
-
-        silent=True(자동 저장/창 닫기/프로젝트 전환)면 팝업 없이 상태 표시줄로만 알린다.
-        """
+        """현재 화면 내용을 저장한다. 자동 저장도 AI를 호출하지 않는다."""
         saved, failed = [], []
-        # 1) 기획 (아이디어/마스터 기획/핵심 기준/전체 플롯)
         try:
-            p = self.views[0]
-            idea = p.ideaEdit.toPlainText().strip()
-            if idea:
-                self.db.set_meta('idea', idea)
-            if p.masterEdit.toPlainText().strip():
-                self.db.save_plan(p.masterEdit.toPlainText())
-            c = p.contractEdit.toPlainText()
+            p=self.planning_view; idea=p.ideaEdit.toPlainText().strip()
+            if idea: self.db.set_meta('idea',idea)
+            if p.masterEdit.toPlainText().strip(): self.db.save_plan(p.masterEdit.toPlainText())
+            c=p.contractEdit.toPlainText()
             if c.strip():
-                # 잠금 상태는 유지한다 (잠금 해제가 전체 저장으로 풀리지 않게)
-                prev = self.db.get_contract()
-                locked = bool(prev['locked']) if prev else False
-                self.db.save_contract(c, locked)
-            if p.masterPlotEdit.toPlainText().strip():
-                self.db.set_meta('master_plot', p.masterPlotEdit.toPlainText())
+                prev=self.db.get_contract(); self.db.save_contract(c, bool(prev['locked']) if prev else False)
+            if p.masterPlotEdit.toPlainText().strip(): self.db.set_meta('master_plot',p.masterPlotEdit.toPlainText())
             saved.append('기획')
         except Exception as e:
-            failed.append('기획'); logger.warning('전체 저장(기획) 실패: %s', e)
-        # 2) 설정 DB (현재 선택/편집 중인 항목)
+            failed.append('기획'); logger.exception('전체 저장(기획) 실패: %s',e)
         try:
-            if self.views[1].save_entry(quiet=True):
-                saved.append('설정 DB')
+            if self.entities_view.save_entry(quiet=True): saved.append('설정 DB')
         except Exception as e:
-            failed.append('설정 DB'); logger.warning('전체 저장(설정 DB) 실패: %s', e)
-        # 3) 스토리 구간 (현재 선택 구간 요약/스냅샷)
+            failed.append('설정 DB'); logger.exception('전체 저장(설정 DB) 실패: %s',e)
         try:
-            if self.views[2].save_detail():
-                saved.append('스토리 구간')
+            if self.story_view.save_detail(): saved.append('스토리')
         except Exception as e:
-            failed.append('스토리 구간'); logger.warning('전체 저장(스토리 구간) 실패: %s', e)
-        # 4) 화별 플롯 (현재 선택 화 플롯)
+            failed.append('스토리'); logger.exception('전체 저장(스토리) 실패: %s',e)
         try:
-            if self.views[3].save_detail():
-                saved.append('화별 플롯')
+            self.save_current(update_end_state=False); saved.append('원고')
         except Exception as e:
-            failed.append('화별 플롯'); logger.warning('전체 저장(화별 플롯) 실패: %s', e)
-        # 5) 원고 (현재 화)
+            failed.append('원고'); logger.exception('전체 저장(원고) 실패: %s',e)
         try:
-            self.save_current(update_memory=not silent)
-            saved.append('원고')
+            if self.end_state_view.save_selected(): saved.append('화 종료 상태')
         except Exception as e:
-            failed.append('원고'); logger.warning('전체 저장(원고) 실패: %s', e)
-        # 6) 기억/연속성 메모
-        try:
-            if self.views[5].save_detail():
-                saved.append('기억/연속성')
-        except Exception as e:
-            failed.append('기억/연속성'); logger.warning('전체 저장(기억/연속성) 실패: %s', e)
+            failed.append('화 종료 상태'); logger.exception('전체 저장(종료 상태) 실패: %s',e)
         if failed:
-            if silent:
-                self.statusBar().showMessage('자동 저장 실패: ' + ', '.join(failed))
-            else:
-                QMessageBox.warning(self, '전체 저장',
-                                    '일부 저장에 실패했습니다.\n\n실패: ' + ', '.join(failed)
-                                    + '\n저장됨: ' + (', '.join(saved) or '없음'))
+            msg='자동 저장 실패: ' if silent else '일부 저장에 실패했습니다: '; self.statusBar().showMessage(msg+', '.join(failed))
+            if not silent: QMessageBox.warning(self,'전체 저장',msg+' / '.join(failed))
         elif saved:
-            if silent:
-                self.statusBar().showMessage('자동 저장 완료: ' + ', '.join(saved))
-            else:
-                self.statusBar().showMessage('전체 저장 완료: ' + ', '.join(saved))
-                QMessageBox.information(self, '전체 저장',
-                                        '모든 내용을 저장했습니다.\n- ' + '\n- '.join(saved))
-        else:
-            self.statusBar().showMessage('저장할 내용이 없습니다.')
+            self.statusBar().showMessage(('자동 저장 완료: ' if silent else '전체 저장 완료: ')+', '.join(saved))
+            if not silent: QMessageBox.information(self,'전체 저장','저장했습니다.\n- '+'\n- '.join(saved))
 
     # ---------- 자동 저장 ----------
     def _setup_auto_save(self, minutes):
@@ -1029,14 +844,13 @@ class MainWindow(QMainWindow):
         제외한다. 위젯명이 없는 경우(getattr 실패)는 해당 탭만 건너뛰고 계속 진행한다.
         """
         targets = [
-            ('기획-아이디어', getattr(self.views[0], 'ideaEdit', None)),
-            ('기획-마스터', getattr(self.views[0], 'masterEdit', None)),
-            ('기획-핵심 기준', getattr(self.views[0], 'contractEdit', None)),
-            ('기획-전체 플롯', getattr(self.views[0], 'masterPlotEdit', None)),
-            ('스토리 구간', getattr(self.views[2], 'detail', None)),
-            ('화별 플롯', getattr(self.views[3], 'detail', None)),
-            ('원고', getattr(self.views[4], 'editor', None)),
-            ('기억/연속성', getattr(self.views[5], 'edit', None)),
+            ('기획-아이디어', getattr(self.planning_view, 'ideaEdit', None)),
+            ('기획-마스터', getattr(self.planning_view, 'masterEdit', None)),
+            ('기획-핵심 기준', getattr(self.planning_view, 'contractEdit', None)),
+            ('기획-전체 플롯', getattr(self.planning_view, 'masterPlotEdit', None)),
+            ('스토리', getattr(self.story_view, 'detail', None)),
+            ('원고', getattr(self.manuscript_view, 'editor', None)),
+            ('화 종료 상태', getattr(self.end_state_view, 'edit', None)),
         ]
         changed = []
         for name, w in targets:
@@ -1062,12 +876,18 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, 'AI 기호 삭제', msg)
 
     def closeEvent(self, event):
-        """창 닫을 때 현재 내용을 자동 저장한다 (AI 작업 중이면 건너뜀)."""
+        """창 닫을 때 현재 편집 내용과 AI 집필 중 부분 결과를 먼저 보존한다."""
         try:
-            if not self._busy and not self.controller.busy:
+            active=self._active_manuscript_job
+            if active and active.get('buffer'):
+                chapter=int(active['chapter']); partial=''.join(active.get('buffer', []))
+                if partial.strip():
+                    self.pm.save_chapter(chapter, partial)
+                    self.db.set_chapter_meta(chapter, f'{chapter}화', '초안', count_chars(partial), count_chars(partial, True), int(self.pm.settings['chapter_chars']))
+            elif not self._busy and not self.controller.busy:
                 self.save_all(silent=True)
         except Exception:
-            pass
+            logger.exception('종료 전 원고 저장 실패')
         # 독립 채팅창도 함께 닫기
         try:
             if hasattr(self, 'chat_window') and self.chat_window is not None:
@@ -1080,90 +900,52 @@ class MainWindow(QMainWindow):
                 self.controller.pool.waitForDone(3000)  # 최대 3초 대기
         except Exception:
             pass
+        # Qt 작업 스레드가 종료된 뒤 프로젝트의 모든 SQLite 연결을 닫는다.
+        try:
+            if getattr(self, 'db', None) is not None:
+                self.db.close()
+        except Exception:
+            logger.exception('프로젝트 DB 종료 실패')
         super().closeEvent(event)
 
     def write_current(self):
-        """현재 화에 귀속된 AI 집필 작업을 시작한다. 화면 전환과 무관하게 결과를 보존한다."""
+        """현재 화에 고정된 AI 집필. 화면을 이동해도 작업 대상 화의 결과를 계속 보존한다."""
         self._adjust_attempts = 0
-        if not self._check_write_prereq():
-            return
-
+        if not self._check_write_prereq(): return
         target_chapter = int(self.current)
         buffer = []
-        snapshot_id = self.ai_snapshots.start(
-            'manuscript_write', {'chapter': target_chapter}
-        )
-        self._active_manuscript_job = {
-            'chapter': target_chapter,
-            'buffer': buffer,
-            'snapshot_id': snapshot_id,
-        }
-        checkpoint_chars = 0
+        self._active_manuscript_job = {'chapter': target_chapter, 'buffer': buffer}
 
         def stream_callback(token):
-            nonlocal checkpoint_chars
             token = str(token or '')
-            if not token:
-                return
+            if not token: return
             buffer.append(token)
-            checkpoint_chars += len(token)
-            if checkpoint_chars >= 1200 or len(buffer) == 1:
-                checkpoint_chars = 0
-                self.ai_snapshots.update(
-                    snapshot_id, ''.join(buffer), target={'chapter': target_chapter}
-                )
-            # 현재 화면이 대상 화일 때만 UI를 갱신한다. 다른 화를 보고 있어도
-            # 작업 버퍼와 스냅샷은 계속 누적되므로 화면 전환이 결과를 잃게 만들지 않는다.
             if self.current == target_chapter:
                 try:
-                    self.views[4].editor.setPlainText(''.join(buffer))
-                    self.views[4].editor.moveCursor(QTextCursor.MoveOperation.End)
+                    self.manuscript_view.editor.setPlainText(''.join(buffer))
+                    self.manuscript_view.editor.moveCursor(QTextCursor.MoveOperation.End)
                     self.update_count()
                 except Exception:
                     logger.exception('원고 스트리밍 UI 반영 실패')
 
         def done_callback(result):
-            text = str(result if result is not None else ''.join(buffer))
-            if not text.strip():
-                text = ''.join(buffer)
-            self._handle_written_result(text, target_chapter, snapshot_id)
+            text = str(result if result is not None else ''.join(buffer)) or ''.join(buffer)
+            self._handle_written_result(text, target_chapter)
 
         def cancelled_callback():
-            partial = ''.join(buffer)
+            partial=''.join(buffer)
             try:
                 if partial.strip():
                     self.pm.save_chapter(target_chapter, partial)
-                    self.db.set_chapter_meta(
-                        target_chapter, f'{target_chapter}화', '초안',
-                        count_chars(partial), count_chars(partial, True),
-                        int(self.pm.settings['chapter_chars'])
-                    )
-                self.ai_snapshots.finish(
-                    snapshot_id, 'cancelled', partial,
-                    target={'chapter': target_chapter}
-                )
-            except Exception:
-                logger.exception('AI 집필 취소 시 부분 원고 저장 실패')
-            self._active_manuscript_job = None
+                    self.db.set_chapter_meta(target_chapter, f'{target_chapter}화', '초안', count_chars(partial), count_chars(partial, True), int(self.pm.settings['chapter_chars']))
+            finally:
+                self._active_manuscript_job=None
 
         def error_callback(error):
-            self.ai_snapshots.finish(
-                snapshot_id, 'failed', ''.join(buffer),
-                error=str(error), target={'chapter': target_chapter}
-            )
-            self._active_manuscript_job = None
+            self._active_manuscript_job=None
             logger.error('AI 집필 실패(%s화): %s', target_chapter, error)
 
-        ok = self.controller.write_chapter(
-            target_chapter, stream_callback, done_callback,
-            error_callback, cancelled_callback
-        )
-        if not ok:
-            self.ai_snapshots.finish(
-                snapshot_id, 'rejected', ''.join(buffer),
-                target={'chapter': target_chapter}
-            )
-            self._active_manuscript_job = None
+        return self.controller.write_chapter(target_chapter, stream_callback, done_callback, error_callback, cancelled_callback)
 
     # AI가 원고 대신 안내/거부 메시지를 반환할 때 쓰는 전형적 표현.
     # 이런 응답을 원고 파일에 저장하면 다음 집필·윤문·연속성 검사가 전부 오염된다.
@@ -1190,7 +972,7 @@ class MainWindow(QMainWindow):
             return False
         return any(m in t for m in cls._AI_REFUSAL_MARKERS)
 
-    def _handle_written_result(self, text, chapter=None, snapshot_id=None):
+    def _handle_written_result(self, text, chapter=None):
         """집필 결과를 시작 시 고정한 화에 저장한 뒤 필요하면 분량 보정을 수행한다.
 
         AI 응답이 빈 문자열이거나 "원고를 제공하라"는 안내/거부 메시지면
@@ -1204,11 +986,6 @@ class MainWindow(QMainWindow):
 
         if not final_text.strip():
             logger.warning('%s화: AI 집필 결과가 비어 있어 저장하지 않습니다.', chapter)
-            if snapshot_id:
-                self.ai_snapshots.finish(
-                    snapshot_id, 'failed', '',
-                    error='AI 응답이 비어 있습니다.', target={'chapter': chapter}
-                )
             self._active_manuscript_job = None
             self.statusBar().showMessage(
                 f'{chapter}화: AI가 빈 응답을 반환했습니다. 저장하지 않았습니다. 다시 집필해 주세요.'
@@ -1220,16 +997,10 @@ class MainWindow(QMainWindow):
                 '%s화: AI가 본문 대신 안내/거부 메시지를 반환해 저장하지 않습니다: %s',
                 chapter, final_text[:120]
             )
-            if snapshot_id:
-                self.ai_snapshots.finish(
-                    snapshot_id, 'failed', final_text,
-                    error='AI가 원고 대신 안내 메시지를 반환했습니다.',
-                    target={'chapter': chapter}
-                )
             self._active_manuscript_job = None
             self.statusBar().showMessage(
                 f'{chapter}화: AI가 원고 대신 안내 메시지를 반환했습니다. 저장하지 않았습니다. '
-                '기획/화별 플롯/직전 화 저장 상태를 확인 후 다시 집필해 주세요.'
+                '기획/직전 화 종료 상태를 확인 후 다시 집필해 주세요.'
             )
             return
 
@@ -1242,7 +1013,7 @@ class MainWindow(QMainWindow):
                 f'목표 글자 수 보정 중... ({attempt}/3)',
                 lambda: self.writer.adjust(final_text, target, tol),
                 lambda adjusted: self._handle_written_result(
-                    adjusted, chapter, snapshot_id
+                    adjusted, chapter
                 ),
             )
             return
@@ -1256,19 +1027,14 @@ class MainWindow(QMainWindow):
             chapter, f'{chapter}화', '초안' if final_text.strip() else '미작성',
             count_chars(final_text), count_chars(final_text, True), target
         )
-        if snapshot_id:
-            self.ai_snapshots.finish(
-                snapshot_id, 'completed', final_text,
-                target={'chapter': chapter}
-            )
         active = self._active_manuscript_job
         if active and int(active.get('chapter', -1)) == chapter:
             active['buffer'] = [final_text]
 
         if self.current == chapter:
-            self.views[4].editor.blockSignals(True)
-            self.views[4].editor.setPlainText(final_text)
-            self.views[4].editor.blockSignals(False)
+            self.manuscript_view.editor.blockSignals(True)
+            self.manuscript_view.editor.setPlainText(final_text)
+            self.manuscript_view.editor.blockSignals(False)
             self.update_count()
             self.statusBar().showMessage(f'{chapter}화 초안 생성 완료 · 자동 보존됨 · 검토 후 저장하세요.')
         else:
@@ -1277,132 +1043,95 @@ class MainWindow(QMainWindow):
         self._load_chapters()
         self._active_manuscript_job = None
 
-    def _update_memory_and_continuity(self, chapter: int, text: str) -> tuple:
-        """확정 원고를 기준으로 장기 기억과 연속성을 갱신한다."""
-        prev = self.db.latest_chapter_state(chapter - 1)
-        previous_state = prev['state'] if prev else ''
-        memory_result = self.controller.memory_service.update_memory(
-            chapter, text, previous_state
-        )
-        continuity_result = self.controller.continuity_service.check_chapter(
-            chapter, text
-        )
-        return memory_result, continuity_result.message
-
-
     def revise_current(self):
-        original = self.views[4].editor.toPlainText()
+        original = self.manuscript_view.editor.toPlainText()
         text = original
         stream_started = False
 
         def stream_callback(token):
             nonlocal stream_started
             if not stream_started:
-                self.views[4].editor.clear()
+                self.manuscript_view.editor.clear()
                 stream_started = True
-            self.views[4].editor.insertPlainText(token)
+            self.manuscript_view.editor.insertPlainText(token)
 
         def done_callback(result):
             result_text = str(result or '')
             # AI가 윤문 대신 안내/거부 메시지를 반환하면 편집창에 두면 안 된다.
             # 그대로 두면 5분 자동 저장이 그 메시지를 원고 파일에 기록해버린다.
             if not result_text.strip() or self._looks_like_ai_refusal(result_text):
-                self.views[4].editor.setPlainText(original)
+                self.manuscript_view.editor.setPlainText(original)
                 self.update_count()
                 self.statusBar().showMessage(
                     '윤문 중단: AI가 본문 대신 안내 메시지를 반환했습니다. 원본을 복원했습니다.'
                 )
                 return
-            self.views[4].editor.setPlainText(result_text)
+            self.manuscript_view.editor.setPlainText(result_text)
             self.update_count()
 
         if not text.strip():
             self.statusBar().showMessage('윤문할 원고가 없습니다. 먼저 본문을 작성해 주세요.')
             return
         self.controller.revise_text(text, stream_callback, done_callback)
-    def _refresh_long_memory(self):
-        """장기 기억 새로고침(현재 화 기준)을 백그라운드에서 실행한다.
+    def generate_chapter_stories(self):
+        kind,row=self.story_view.selected()
+        if kind not in ('sub','long') or not row:
+            QMessageBox.information(self,'세부 스토리 선택','먼저 장기 또는 세부 스토리 구간을 선택하세요.')
+            return
+        start=int(row['start_chapter']); end=int(row['end_chapter'])
+        sub_content=(row['content'] or '')
+        def work():
+            raw=self.plot.generate_chapter_stories(start,end,sub_content)
+            parsed=parse_chapter_stories(raw,start,end)
+            if not parsed:
+                raise ValueError('화별 스토리 응답을 화 번호 형식으로 파싱하지 못했습니다.')
+            for n,title,content in parsed:
+                sub=self.db.story_subsection_for_chapter(n); long=self.db.section_for_chapter(n)
+                self.db.save_chapter_story(n,int(long['start_chapter']) if long else 0,int(long['end_chapter']) if long else 0,int(sub['start_chapter']) if sub else 0,int(sub['end_chapter']) if sub else 0,title or f'{n}화',content,'생성완료')
+            return len(parsed)
+        self._run('AI 화별 스토리 생성 중...',work,lambda n:(self.story_view.refresh(),self.statusBar().showMessage(f'화별 스토리 {n}개 생성 완료')))
 
-        기존 코드는 UI 스레드에서 ``memory.update()``를 동기 실행해 수십 초간
-        창이 얼어붙고(Windows "응답 없음"), 취소도 안 먹었다. Controller 경로로
-        옮겨 정지 버튼·상태바·빈 에러창 문제를 함께 해결한다.
-        """
-        path = self.project_root / 'chapters' / f'{self.current:03d}.txt'
-        if not path.exists():
-            QMessageBox.information(self, '장기 기억', '현재 화 원고가 없습니다.')
+    def regenerate_selected_chapter_story(self):
+        kind,row=self.story_view.selected()
+        if kind!='chapter' or not row:
+            QMessageBox.information(self,'화 선택','먼저 재생성할 화별 스토리를 선택하세요.')
             return
-        try:
-            text = path.read_text(encoding='utf-8')
-        except Exception as e:
-            QMessageBox.critical(self, '장기 기억 오류', f'원고 읽기 실패: {e}')
+        n=int(row['chapter_number'])
+        sub=self.db.story_subsection_for_chapter(n); long=self.db.section_for_chapter(n)
+        context=(sub['content'] if sub else '') or (long['content'] if long else '') or ''
+        def work():
+            raw=self.plot.generate_chapter_stories(n,n,context,'')
+            parsed=parse_chapter_stories(raw,n,n)
+            if not parsed: raise ValueError(f'{n}화 스토리 파싱에 실패했습니다.')
+            _,title,content=parsed[0]
+            self.db.save_chapter_story(n,int(long['start_chapter']) if long else 0,int(long['end_chapter']) if long else 0,int(sub['start_chapter']) if sub else 0,int(sub['end_chapter']) if sub else 0,title or f'{n}화',content,'생성완료')
+            return 1
+        self._run(f'{n}화 스토리 재생성 중...',work,lambda _:self.story_view.refresh())
+
+    def generate_end_state_selected(self):
+        n = self.end_state_view.selected_chapter()
+        if not n:
             return
+        text = self.pm.load_chapter(n)
         if not text.strip():
-            QMessageBox.information(self, '장기 기억', '현재 화 원고가 비어 있습니다.')
+            QMessageBox.information(self,'화 종료 상태','선택한 화의 원고가 없습니다.')
             return
-
-        chapter = self.current
-
-        def job():
-            prev = self.db.latest_chapter_state(chapter - 1)
-            previous_state = prev['state'] if prev else ''
-            return self.controller.memory_service.update_memory(
-                chapter, text, previous_state)
-
-        def on_done(result):
-            try:
-                sm, st = result
-            except Exception:
-                sm, st = str(result), ''
-            self.views[5].edit.setPlainText(
-                (sm or '') + '\n\n[상태]\n' + (st or ''))
-            self._update_state()
-            self.statusBar().showMessage('장기 기억 새로고침 완료')
-
-        def on_error(error):
-            message = str(error).strip() if error is not None else ''
-            QMessageBox.critical(
-                self, '장기 기억 오류', message or '장기 기억 갱신 중 오류가 발생했습니다.')
-
-        def on_cancelled():
-            self.statusBar().showMessage('장기 기억 새로고침이 취소되었습니다.')
-
-        self._run('장기 기억 새로고침 중...', job, on_done,
-                  error_callback=on_error, cancelled_callback=on_cancelled)
+        def done(result):
+            self.end_state_view.refresh(); self._update_state(); self.statusBar().showMessage(f'{n}화 종료 상태 생성 완료')
+        self.controller.generate_end_state(n, text, done_callback=done, error_callback=lambda e:self.statusBar().showMessage(f'종료 상태 생성 실패: {e}'), cancelled_callback=lambda:self.statusBar().showMessage('화 종료 상태 생성이 취소되었습니다.'))
 
     def audit_long_form(self):
-        """장편 정밀 연속성 검사를 Controller에서 실행한다."""
-        mem = self.views[5]
-
+        view=self.end_state_view
         def on_done(result):
-            mem.edit.setPlainText(result or '검사 결과가 없습니다.')
-            self.statusBar().showMessage('장편 정밀 검사 완료')
-
-        def on_error(error):
-            message = str(error).strip() if error is not None else ''
-            mem.edit.setPlainText(
-                f'장편 정밀 검사 실패: {message or "알 수 없는 오류"}')
-            self.statusBar().showMessage('장편 정밀 검사 실패')
-
-        def on_cancelled():
-            mem.edit.setPlainText('장편 정밀 검사가 취소되었습니다.')
-            self.statusBar().showMessage('장편 정밀 검사가 취소되었습니다.')
-
-        self._run('장편 정밀 연속성 검사 중...',
-                  lambda: self.controller.continuity_service.audit_long_form(
-                      size=50,
-                      progress_callback=lambda c, t, r, o: self.controller.progress_updated.emit(
-                          c, t, f'장편 정밀 검사 {r}'),
-                      cancelled_check=self.controller.cancelled_check(),
-                  ),
-                  on_done,
-                  error_callback=on_error, cancelled_callback=on_cancelled)
+            view.edit.setPlainText(result or '검사 결과가 없습니다.'); self.statusBar().showMessage('장편 정밀 검사 완료')
+        self._run('장편 정밀 연속성 검사 중...', lambda: self.controller.continuity_service.audit_long_form(size=50, progress_callback=lambda c,t,r,o: self.controller.progress_updated.emit(c,t,f'장편 정밀 검사 {r}'), cancelled_check=self.controller.cancelled_check()), on_done, error_callback=lambda e:self.statusBar().showMessage(f'검사 실패: {e}'), cancelled_callback=lambda:self.statusBar().showMessage('장편 정밀 검사가 취소되었습니다.'))
 
     def check_current(self):
-        text = self.views[4].editor.toPlainText()
+        text = self.manuscript_view.editor.toPlainText()
 
         def done_callback(result):
             text = getattr(result, 'message', None) or str(result)
-            self.views[5].edit.setPlainText(text)
+            self.end_state_view.edit.setPlainText(text)
             self.statusBar().showMessage('설정 충돌 검사 완료')
 
         def on_error(error):
@@ -1419,7 +1148,7 @@ class MainWindow(QMainWindow):
         # Controller busy 거부는 _run이 상태바로 알린다.
     def spellcheck_current(self):
         """요청 7-1: 맞춤법 검사. py-hanspell이 있으면 사용, 없으면 AI로 대체한다."""
-        t = self.views[4].editor.toPlainText()
+        t = self.manuscript_view.editor.toPlainText()
         if not t.strip():
             return
 
@@ -1431,7 +1160,7 @@ class MainWindow(QMainWindow):
             ret = QMessageBox.question(self, '맞춤법 검사',
                                        f'{nerr}개의 맞춤법 오류를 수정했습니다.\n수정 내용을 반영할까요?')
             if ret == QMessageBox.StandardButton.Yes:
-                self.views[4].editor.setPlainText(corrected)
+                self.manuscript_view.editor.setPlainText(corrected)
                 self.update_count()
             return
         # py-hanspell 미설치 → AI 맞춤법 검사
@@ -1445,15 +1174,15 @@ class MainWindow(QMainWindow):
         if not out:
             QMessageBox.information(self, '맞춤법 검사', '결과가 비어 있습니다.')
             return
-        self.views[4].editor.setPlainText(out)
+        self.manuscript_view.editor.setPlainText(out)
         self.update_count()
         QMessageBox.information(self, '맞춤법 검사', 'AI 맞춤법 검사가 완료되어 본문에 반영했습니다.')
     def clean_marks_current(self):
         """요청 7-2: AI 특유 기호(마크다운/장식) 제거."""
-        t = self.views[4].editor.toPlainText()
+        t = self.manuscript_view.editor.toPlainText()
         out = strip_ai_marks(t)
         if out != t:
-            self.views[4].editor.setPlainText(out)
+            self.manuscript_view.editor.setPlainText(out)
             self.update_count()
             QMessageBox.information(self, 'AI 기호 삭제', 'AI 특유 기호를 제거했습니다.')
         else:
@@ -1568,7 +1297,7 @@ class MainWindow(QMainWindow):
         d=AISettingsDialog(self.providers,self.app,self)
         if d.exec()==QDialog.DialogCode.Accepted:self._update_ai_status(); self.apply_editor_style()
     def apply_editor_style(self):
-        s=self.app.data['editor']; v=self.views[4].editor; v.setFont(QFont(str(s['font_family']),int(s['font_size']))); v.setStyleSheet(f"QPlainTextEdit{{color:{s['text_color']};background-color:{s['bg_color']};}}")
+        s=self.app.data['editor']; v=self.manuscript_view.editor; v.setFont(QFont(str(s['font_family']),int(s['font_size']))); v.setStyleSheet(f"QPlainTextEdit{{color:{s['text_color']};background-color:{s['bg_color']};}}")
     def _update_ai_status(self):
         # NOTE: 여기서 네트워크 I/O(list_models 등)를 하면 안 된다.
         # LM Studio가 꺼져 있으면 UI 스레드가 타임아웃까지 멈추기 때문.
@@ -1582,86 +1311,28 @@ class MainWindow(QMainWindow):
             logger.warning('AI 상태 갱신 실패: %s', e)
             self.aiStatus.setText('AI ● 확인 필요')
     def _update_state(self):
-        """우측 사이드바의 직전 확정 상태 스냅샷을 가독성 높은 카드 형태로 표시한다.
-
-        현재 작성 중인 화는 아직 확정 전일 수 있으므로, 스냅샷 기준은 항상
-        ``현재 화 - 1``을 사용한다. 예: 11화 작성 화면 -> state:10.
-        """
-        view = self.ui.findChild(QTextBrowser, 'stateText')
-        if view is None:
-            return
-
-        chapter = int(self.current)
-        requested_snapshot_chapter = chapter - 1
-        row = (self.db.snapshot(f'state:{requested_snapshot_chapter}')
-               if requested_snapshot_chapter > 0 else None)
-        if row is None:
-            # state:N-1이 없으면 'N-1 이하 최신'으로만 대체한다.
-            # (그냥 최신 전체를 가져오면 미확정인 현재 화 스냅샷이 섞일 수 있다.)
-            row = self.db.latest_state_snapshot(
-                requested_snapshot_chapter if requested_snapshot_chapter > 0 else None
-            )
-        snapshot_chapter = 0
-        if row:
-            try:
-                snapshot_chapter = int(str(row['scope']).split(':', 1)[1])
-            except (ValueError, IndexError, KeyError, TypeError):
-                snapshot_chapter = requested_snapshot_chapter if requested_snapshot_chapter > 0 else 0
-        title = str(self.pm.settings.get('title', '') or '작품').strip()
-        content = (row['content'] or '').strip() if row else ''
-
-        def esc(text: str) -> str:
-            from html import escape
-            return escape(text).replace('\n', '<br>')
-
-        import re
-        blocks = []
-        if content:
-            pattern = re.compile(r'\[([^\]]+)\]\s*')
-            matches = list(pattern.finditer(content))
-            if matches:
-                for i, m in enumerate(matches):
-                    label = m.group(1).strip()
-                    start = m.end()
-                    end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
-                    body = content[start:end].strip()
-                    if not body:
-                        continue
-                    blocks.append((label, body))
-            else:
-                # AI가 필드 태그 없이 문장을 반환한 경우에도 일반 본문으로 표시한다.
-                blocks.append(('상태 요약', content[:5000]))
-
-        parts = [
-            '<div class="snapshot-head">'
-            '<div class="snapshot-title">현재 상태 스냅샷</div>'
-            f'<div class="snapshot-meta">현재 작성 화 <b>{chapter}화</b> · 기준 스냅샷 <b>{snapshot_chapter}화</b></div>'
-            f'<div class="snapshot-work">{esc(title)}</div>'
-            '</div>'
-        ]
+        """현재 집필 화 직전의 화 종료 상태만 오른쪽 사이드바에 표시한다."""
+        view=self.ui.findChild(QTextBrowser,'stateText')
+        if view is None: return
+        chapter=int(self.current); previous=chapter-1
+        row=self.db.chapter_state(previous) if previous>0 else None
+        title=str(self.pm.settings.get('title','') or '작품').strip()
+        content=(row['state'] if row else '') or ''
+        from html import escape
+        head=f'<div class="state-head"><div class="state-title">직전 화 종료 상태</div><div class="state-meta">현재 작성 화 <b>{chapter}화</b> · 기준 <b>{previous}화</b></div><div class="state-work">{escape(title)}</div></div>'
+        body='' 
         if not row:
-            parts.append('<div class="snapshot-empty">아직 직전 확정 화의 상태 스냅샷이 없습니다.</div>')
+            body='<div class="state-empty">직전 화의 종료 상태가 아직 없습니다.</div>'
         else:
-            for label, body in blocks:
-                parts.append(
-                    '<div class="snapshot-card">'
-                    f'<div class="snapshot-field">{esc(label)}</div>'
-                    f'<div class="snapshot-body">{esc(body)}</div>'
-                    '</div>'
-                )
-        view.setStyleSheet(
-            "QTextBrowser { background:#252525; color:#E8E6E3; border:1px solid #5E5B57; border-radius:6px; padding:6px; }"
-        )
-        view.setHtml(
-            '<style>'
-            '.snapshot-head{padding:4px 2px 10px 2px;}'
-            '.snapshot-title{font-size:16px;font-weight:700;color:#F2F0EC;margin-bottom:4px;}'
-            '.snapshot-meta{font-size:12px;color:#B7B3AD;margin-bottom:3px;}'
-            '.snapshot-work{font-size:12px;color:#8F8A83;}'
-            '.snapshot-card{margin:0 0 9px 0;padding:8px 9px;border:1px solid #4F4C48;border-radius:5px;background:#2D2C2B;}'
-            '.snapshot-field{font-size:12px;font-weight:700;color:#D6C6AB;margin-bottom:5px;}'
-            '.snapshot-body{font-size:13px;line-height:1.55;color:#E4E1DD;}'
-            '.snapshot-empty{margin-top:4px;padding:12px;border:1px dashed #5A5651;border-radius:5px;color:#A7A29B;line-height:1.5;}'
-            '</style>' + ''.join(parts)
-        )
+            blocks=[]
+            import re
+            matches=list(re.finditer(r'\[([^\]]+)\]\s*', content))
+            if matches:
+                for i,m in enumerate(matches):
+                    label=m.group(1).strip(); text=content[m.end():(matches[i+1].start() if i+1<len(matches) else len(content))].strip()
+                    if text: blocks.append(f'<div class="state-card"><div class="state-field">{escape(label)}</div><div class="state-body">{escape(text).replace(chr(10),"<br>")}</div></div>')
+            else:
+                blocks=[f'<div class="state-card"><div class="state-field">종료 상태</div><div class="state-body">{escape(content).replace(chr(10),"<br>")}</div></div>']
+            body=''.join(blocks)
+        view.setHtml('<style>.state-head{padding:4px 2px 10px}.state-title{font-size:16px;font-weight:700}.state-meta,.state-work{font-size:12px;color:#B7B3AD}.state-card{margin:0 0 9px;padding:8px;border:1px solid #4F4C48;border-radius:5px;background:#2D2C2B}.state-field{font-size:12px;font-weight:700;color:#D6C6AB;margin-bottom:5px}.state-body{font-size:13px;line-height:1.55}.state-empty{padding:12px;color:#A7A29B}</style>'+head+body)
         view.verticalScrollBar().setValue(0)

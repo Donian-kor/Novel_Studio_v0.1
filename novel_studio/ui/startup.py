@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QDialog,QMessageBox,QFileDialog,QVBoxLayout
 from novel_studio.ui.loader import load_ui
 from novel_studio.core.project import ProjectManager
 from novel_studio.core.app_settings import AppSettings
-from novel_studio.db.database import Database
+from novel_studio.db.project_database import ProjectDatabase
 from novel_studio.ui.dialogs import AISettingsDialog
 
 MOOD_BY_GENRE = {
@@ -23,7 +23,7 @@ MOOD_BY_GENRE = {
 class StartupDialog(QDialog):
     def __init__(self):
         super().__init__(); ui=load_ui('startup.ui'); lay=QVBoxLayout(self); lay.setContentsMargins(0,0,0,0); lay.addWidget(ui); self.ui=ui
-        for n in ['titleEdit','genreEdit','moodEdit','totalSpin','charSpin','tolSpin','sectionSpin','createBtn','openBtn','settingsBtn','exitBtn']: setattr(self,n,ui.findChild(__import__('PySide6.QtWidgets',fromlist=['QWidget']).QWidget,n))
+        for n in ['titleEdit','genreEdit','moodEdit','totalSpin','charSpin','tolSpin','longStorySpin','subStorySpin','createBtn','openBtn','settingsBtn','exitBtn']: setattr(self,n,ui.findChild(__import__('PySide6.QtWidgets',fromlist=['QWidget']).QWidget,n))
         self.selected_project=None; self.app_settings=AppSettings(); from novel_studio.ai.provider_manager import ProviderManager; self.providers=ProviderManager(self.app_settings)
         self._last_auto_mood = self.moodEdit.text().strip()
         try:
@@ -47,7 +47,7 @@ class StartupDialog(QDialog):
         if root.exists() and (root/'project.json').exists(): QMessageBox.warning(self,'이미 존재','같은 이름의 프로젝트가 이미 있습니다. 다른 작품명을 사용하세요.'); return
         try:
             genre = self.genreEdit.currentText().strip() if hasattr(self.genreEdit, 'currentText') else self.genreEdit.text().strip()
-            pm=ProjectManager(); pm.create(root,title,genre or '선협',self.moodEdit.text().strip() or '진중하고 어두운 분위기',self.totalSpin.value(),self.charSpin.value(),self.tolSpin.value(),self.sectionSpin.value()); db=Database(root/'novel.db'); db.ensure_chapters(self.totalSpin.value(),self.charSpin.value()); db.close(); self.selected_project=root; self.accept()
+            pm=ProjectManager(); pm.create(root=root, title=title, genre=genre or '선협', mood=self.moodEdit.text().strip() or '진중하고 어두운 분위기', total_chapters=self.totalSpin.value(), chapter_chars=self.charSpin.value(), tolerance=self.tolSpin.value(), section_size=self.subStorySpin.value(), long_story_size=self.longStorySpin.value(), sub_story_size=self.subStorySpin.value()); db=ProjectDatabase(root); db.ensure_chapters(self.totalSpin.value(),self.charSpin.value()); db.close(); self.selected_project=root; self.accept()
         except Exception as e: QMessageBox.critical(self,'생성 실패',str(e))
     def open_existing(self):
         path=QFileDialog.getExistingDirectory(self,'기존 Novel Studio 프로젝트 선택')

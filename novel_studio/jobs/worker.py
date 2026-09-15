@@ -1,10 +1,7 @@
 import threading
 
 from PySide6.QtCore import QRunnable, QObject, Signal, Slot
-
-
-class JobCancelled(Exception):
-    """스트리밍 작업을 즉시 중단하기 위한 내부 예외."""
+from novel_studio.utils.cancellation import JobCancelled
 
 
 class Signals(QObject):

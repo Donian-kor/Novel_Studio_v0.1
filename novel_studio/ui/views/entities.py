@@ -346,18 +346,7 @@ class EntitiesView(BaseView):
                 row_id = row.get('id')
                 if not row_id:
                     return False
-                db.execute(
-                    'UPDATE timeline_events SET title=?, description=?, chapter_number=?, story_date=?, location=?, participants=? WHERE id=?',
-                    (
-                        row.get('title', ''),
-                        row.get('description', ''),
-                        row.get('chapter_number'),
-                        row.get('story_date', ''),
-                        row.get('location', ''),
-                        row.get('participants', ''),
-                        row_id,
-                    )
-                )
+                db.update_timeline(row_id, row)
                 saved_label = row.get('title', '')
 
             self.refresh()

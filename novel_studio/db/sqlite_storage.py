@@ -7,15 +7,20 @@ def now():
     return datetime.now().isoformat(timespec="seconds")
 
 # 현재 스키마 버전. 스키마 변경 시 MIGRATIONS에 새 단계를 추가하고 버전을 올린다.
-CURRENT_SCHEMA_VERSION = 3
-MIGRATIONS = {
-    2: "",  # v1→v2: entity_state_ledger 등 테이블 추가(_schema()의 IF NOT EXISTS로 반영)
-    3: "CREATE INDEX IF NOT EXISTS idx_entity_state_updated ON entity_state_ledger(updated_at);",
-}
+CURRENT_SCHEMA_VERSION = 4
+MIGRATIONS = {4: ""}
 
-class Database:
-    def __init__(self, path: Path):
+class SQLiteStorage:
+    SCHEMA_PROFILES = {
+        "story": {"meta", "schema_meta", "plans", "contract", "section_contents", "story_sections", "master_diffs", "plot_batches", "ideas", "story_subsections", "chapter_stories", "search_documents", "search_fts"},
+        "setting": {"schema_meta", "characters", "character_states", "relationships", "world_entities", "timeline_events", "foreshadowing", "major_events", "foreshadow_events", "search_documents", "search_fts"},
+        "manuscript": {"schema_meta", "chapters", "chat_messages", "ai_jobs", "search_documents", "search_fts"},
+        "summary": {"schema_meta", "chapter_states", "continuity_checks", "search_documents", "search_fts"},
+    }
+
+    def __init__(self, path: Path, profile: str | None = None):
         self.path = Path(path)
+        self.profile = profile
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
@@ -24,19 +29,35 @@ class Database:
         self._schema()
 
     def close(self):
+        """SQLite 연결을 완전히 종료한다. Windows의 WAL 파일 잠금도 정리한다."""
+        conn = getattr(self, "conn", None)
+        if conn is None:
+            return
         try:
-            self.conn.commit()
-            self.conn.close()
-        except Exception:
+            conn.commit()
+            try:
+                # 열린 cursor/연결이 남아 있지 않을 때 WAL을 즉시 정리한다.
+                conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except sqlite3.Error:
+                pass
+        except sqlite3.Error:
             pass
+        finally:
+            try:
+                conn.close()
+            except sqlite3.Error:
+                pass
+            self.conn = None
 
     def _schema(self):
         self.conn.executescript("""
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS schema_meta(version INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS chapters(number INTEGER PRIMARY KEY,title TEXT DEFAULT '',status TEXT DEFAULT '미작성',char_count INTEGER DEFAULT 0,char_count_spaces INTEGER DEFAULT 0,target_chars INTEGER DEFAULT 5000,updated_at TEXT);
-        CREATE TABLE IF NOT EXISTS chapter_plans(chapter_number INTEGER PRIMARY KEY,title TEXT DEFAULT '',content TEXT DEFAULT '',status TEXT DEFAULT '초안',updated_at TEXT);
-        CREATE TABLE IF NOT EXISTS story_sections(id INTEGER PRIMARY KEY AUTOINCREMENT,start_chapter INTEGER NOT NULL,end_chapter INTEGER NOT NULL,status TEXT DEFAULT '미작성',content TEXT DEFAULT '',snapshot TEXT DEFAULT '',updated_at TEXT,UNIQUE(start_chapter,end_chapter));
+        CREATE TABLE IF NOT EXISTS story_sections(id INTEGER PRIMARY KEY AUTOINCREMENT,start_chapter INTEGER NOT NULL,end_chapter INTEGER NOT NULL,status TEXT DEFAULT '미작성',content TEXT DEFAULT '',updated_at TEXT,UNIQUE(start_chapter,end_chapter));
+        CREATE TABLE IF NOT EXISTS story_subsections(id INTEGER PRIMARY KEY AUTOINCREMENT,parent_start INTEGER NOT NULL,parent_end INTEGER NOT NULL,start_chapter INTEGER NOT NULL,end_chapter INTEGER NOT NULL,title TEXT DEFAULT '',content TEXT DEFAULT '',status TEXT DEFAULT '미작성',updated_at TEXT,UNIQUE(parent_start,parent_end,start_chapter,end_chapter));
+        CREATE INDEX IF NOT EXISTS idx_story_sub_parent ON story_subsections(parent_start,parent_end,start_chapter);
+        CREATE TABLE IF NOT EXISTS chapter_stories(chapter_number INTEGER PRIMARY KEY,long_start INTEGER DEFAULT 0,long_end INTEGER DEFAULT 0,sub_start INTEGER DEFAULT 0,sub_end INTEGER DEFAULT 0,title TEXT DEFAULT '',content TEXT DEFAULT '',status TEXT DEFAULT '초안',updated_at TEXT);
         CREATE TABLE IF NOT EXISTS characters(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE NOT NULL,role TEXT DEFAULT '',profile TEXT DEFAULT '',personality TEXT DEFAULT '',speech_style TEXT DEFAULT '',goal TEXT DEFAULT '',secret TEXT DEFAULT '',arc TEXT DEFAULT '',status TEXT DEFAULT '초안',updated_at TEXT);
         CREATE TABLE IF NOT EXISTS character_states(id INTEGER PRIMARY KEY AUTOINCREMENT,character_id INTEGER NOT NULL,chapter_number INTEGER NOT NULL,location TEXT DEFAULT '',cultivation TEXT DEFAULT '',condition TEXT DEFAULT '',injuries TEXT DEFAULT '',possessions TEXT DEFAULT '',emotions TEXT DEFAULT '',knows TEXT DEFAULT '',does_not_know TEXT DEFAULT '',notes TEXT DEFAULT '',updated_at TEXT,UNIQUE(character_id,chapter_number),FOREIGN KEY(character_id) REFERENCES characters(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS relationships(id INTEGER PRIMARY KEY AUTOINCREMENT,from_character TEXT,to_character TEXT,relation TEXT,current_state TEXT DEFAULT '',history TEXT DEFAULT '',start_chapter INTEGER,updated_at TEXT,UNIQUE(from_character,to_character,relation));
@@ -44,13 +65,8 @@ class Database:
         CREATE TABLE IF NOT EXISTS timeline_events(id INTEGER PRIMARY KEY AUTOINCREMENT,chapter_number INTEGER,story_date TEXT DEFAULT '',title TEXT DEFAULT '',description TEXT DEFAULT '',location TEXT DEFAULT '',participants TEXT DEFAULT '',updated_at TEXT);
         CREATE TABLE IF NOT EXISTS foreshadowing(id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT UNIQUE NOT NULL,title TEXT DEFAULT '',first_chapter INTEGER,latest_chapter INTEGER,reveal_chapter INTEGER,status TEXT DEFAULT '활성',public_info TEXT DEFAULT '',author_truth TEXT DEFAULT '',related_characters TEXT DEFAULT '',notes TEXT DEFAULT '',updated_at TEXT);
         CREATE TABLE IF NOT EXISTS major_events(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT UNIQUE NOT NULL,start_chapter INTEGER,end_chapter INTEGER,description TEXT DEFAULT '',consequence TEXT DEFAULT '',status TEXT DEFAULT '계획',updated_at TEXT);
-        CREATE TABLE IF NOT EXISTS summaries(chapter_number INTEGER PRIMARY KEY,summary TEXT DEFAULT '',state_snapshot TEXT DEFAULT '',updated_at TEXT);
         CREATE TABLE IF NOT EXISTS chapter_states(chapter_number INTEGER PRIMARY KEY,summary TEXT DEFAULT '',state TEXT DEFAULT '',source_hash TEXT DEFAULT '',status TEXT DEFAULT '갱신완료',updated_at TEXT);
-        CREATE TABLE IF NOT EXISTS section_memories(start_chapter INTEGER NOT NULL,end_chapter INTEGER NOT NULL,content TEXT DEFAULT '',source_hash TEXT DEFAULT '',status TEXT DEFAULT '갱신완료',updated_at TEXT,PRIMARY KEY(start_chapter,end_chapter));
-        CREATE TABLE IF NOT EXISTS arc_memories(arc_number INTEGER PRIMARY KEY, start_chapter INTEGER NOT NULL,end_chapter INTEGER NOT NULL,content TEXT DEFAULT '',source_hash TEXT DEFAULT '',status TEXT DEFAULT '갱신완료',updated_at TEXT);
-        CREATE TABLE IF NOT EXISTS snapshots(scope TEXT PRIMARY KEY,content TEXT DEFAULT '',updated_at TEXT);
         CREATE TABLE IF NOT EXISTS continuity_checks(id INTEGER PRIMARY KEY AUTOINCREMENT,chapter_number INTEGER,severity TEXT,category TEXT,message TEXT,evidence TEXT DEFAULT '',status TEXT DEFAULT '미해결',created_at TEXT);
-        CREATE TABLE IF NOT EXISTS entity_state_ledger(id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,entity_key TEXT NOT NULL,chapter_number INTEGER NOT NULL,state TEXT DEFAULT '',source_hash TEXT DEFAULT '',updated_at TEXT,UNIQUE(kind,entity_key,chapter_number));
         CREATE TABLE IF NOT EXISTS foreshadow_events(id INTEGER PRIMARY KEY AUTOINCREMENT,foreshadow_id INTEGER NOT NULL,chapter_number INTEGER NOT NULL,event_type TEXT NOT NULL,description TEXT DEFAULT '',before_state TEXT DEFAULT '',after_state TEXT DEFAULT '',created_at TEXT,UNIQUE(foreshadow_id,chapter_number,event_type),FOREIGN KEY(foreshadow_id) REFERENCES foreshadowing(id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS master_diffs(id INTEGER PRIMARY KEY AUTOINCREMENT,category TEXT NOT NULL,payload TEXT NOT NULL,status TEXT DEFAULT '제안',created_at TEXT,applied_at TEXT);
         CREATE TABLE IF NOT EXISTS plot_batches(id INTEGER PRIMARY KEY AUTOINCREMENT,start_chapter INTEGER NOT NULL,end_chapter INTEGER NOT NULL,status TEXT DEFAULT '대기',updated_at TEXT,UNIQUE(start_chapter,end_chapter));
@@ -64,7 +80,6 @@ class Database:
         CREATE TABLE IF NOT EXISTS section_contents(section TEXT PRIMARY KEY,content TEXT DEFAULT '',status TEXT DEFAULT '초안',updated_at TEXT);
         CREATE INDEX IF NOT EXISTS idx_chapters_status ON chapters(status);
         CREATE INDEX IF NOT EXISTS idx_chapters_updated_at ON chapters(updated_at);
-        CREATE INDEX IF NOT EXISTS idx_chapter_plans_status ON chapter_plans(status);
         CREATE INDEX IF NOT EXISTS idx_story_sections_start_end ON story_sections(start_chapter,end_chapter);
         CREATE INDEX IF NOT EXISTS idx_character_states_chapter ON character_states(chapter_number);
         CREATE INDEX IF NOT EXISTS idx_character_states_character_chapter ON character_states(character_id,chapter_number);
@@ -73,14 +88,9 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_foreshadow_first ON foreshadowing(first_chapter);
         CREATE INDEX IF NOT EXISTS idx_foreshadow_latest ON foreshadowing(latest_chapter);
         CREATE INDEX IF NOT EXISTS idx_major_events_start ON major_events(start_chapter);
-        CREATE INDEX IF NOT EXISTS idx_summaries_updated_at ON summaries(updated_at);
         CREATE INDEX IF NOT EXISTS idx_chapter_states_updated_at ON chapter_states(updated_at);
-        CREATE INDEX IF NOT EXISTS idx_section_memories_start_end ON section_memories(start_chapter,end_chapter);
-        CREATE INDEX IF NOT EXISTS idx_arc_memories_start_end ON arc_memories(start_chapter,end_chapter);
         CREATE INDEX IF NOT EXISTS idx_continuity_chapter ON continuity_checks(chapter_number);
         CREATE INDEX IF NOT EXISTS idx_chat_chapter ON chat_messages(chapter_number);
-        CREATE INDEX IF NOT EXISTS idx_entity_state_kind_key_chapter ON entity_state_ledger(kind,entity_key,chapter_number);
-        CREATE INDEX IF NOT EXISTS idx_entity_state_chapter ON entity_state_ledger(chapter_number);
         CREATE INDEX IF NOT EXISTS idx_foreshadow_events_chapter ON foreshadow_events(chapter_number);
         CREATE INDEX IF NOT EXISTS idx_foreshadow_events_fk ON foreshadow_events(foreshadow_id);
         CREATE INDEX IF NOT EXISTS idx_master_diffs_status ON master_diffs(status);
@@ -88,7 +98,31 @@ class Database:
         """)
         self.conn.commit()
         self._migrate_schema()
+        self._prune_profile_schema()
         self._ensure_search_index()
+
+    def _prune_profile_schema(self):
+        """프로필별 허용 테이블만 남겨 실제 DB를 물리적으로 분리한다."""
+        if not self.profile:
+            return
+        allowed = self.SCHEMA_PROFILES.get(self.profile)
+        if not allowed:
+            raise ValueError(f"알 수 없는 DB 프로필: {self.profile}")
+        rows = self.conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'").fetchall()
+        names = {str(r[0]) for r in rows}
+        self.conn.execute("PRAGMA foreign_keys=OFF")
+        try:
+            # virtual FTS table and backing table must be pruned together.
+            protected = set(allowed) | {'schema_meta'} | {n for n in names if n.startswith('search_fts_')}
+            for name in sorted(names - protected, reverse=True):
+                try:
+                    self.conn.execute(f'DROP TABLE IF EXISTS "{name}"')
+                except sqlite3.Error:
+                    pass
+            self.conn.execute("PRAGMA user_version = 1501")
+            self.conn.commit()
+        finally:
+            self.conn.execute("PRAGMA foreign_keys=ON")
 
     def _migrate_schema(self):
         """schema_meta 버전에 맞춰 MIGRATIONS를 순차 적용한다.
@@ -163,18 +197,6 @@ class Database:
         self.execute("INSERT INTO section_contents(section,content,status,updated_at) VALUES(?,?,?,?) ON CONFLICT(section) DO UPDATE SET content=excluded.content,status=excluded.status,updated_at=excluded.updated_at",(s,content,status,now()))
         self._index_doc("section", s, f"{s} {content}")
 
-    def chapter_plans(self, limit=None, offset=0):
-        sql="SELECT * FROM chapter_plans ORDER BY chapter_number"; args=[]
-        if limit is not None:
-            sql += " LIMIT ? OFFSET ?"; args=[int(limit),int(offset)]
-        return self.conn.execute(sql,args).fetchall()
-    def chapter_plans_range(self,start,end):
-        return self.conn.execute("SELECT * FROM chapter_plans WHERE chapter_number BETWEEN ? AND ? ORDER BY chapter_number",(int(start),int(end))).fetchall()
-    def chapter_plan(self,n): return self.conn.execute("SELECT * FROM chapter_plans WHERE chapter_number=?",(n,)).fetchone()
-    def save_chapter_plan(self,n,title,content,status="초안"):
-        self.execute("INSERT INTO chapter_plans(chapter_number,title,content,status,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(chapter_number) DO UPDATE SET title=excluded.title,content=excluded.content,status=excluded.status,updated_at=excluded.updated_at",(n,title,content,status,now()))
-        self._index_doc("plot", n, f"{n}화 {title} {content}")
-
     def sections(self, limit=None, offset=0):
         sql="SELECT * FROM story_sections ORDER BY start_chapter"; args=[]
         if limit is not None:
@@ -185,7 +207,26 @@ class Database:
     def sections_overlapping(self, start, end):
         return self.conn.execute("SELECT * FROM story_sections WHERE end_chapter>=? AND start_chapter<=? ORDER BY start_chapter",(int(start),int(end))).fetchall()
     def section(self,s,e): return self.conn.execute("SELECT * FROM story_sections WHERE start_chapter=? AND end_chapter=?",(s,e)).fetchone()
-    def save_section(self,s,e,status,content,snapshot=""): self.execute("INSERT INTO story_sections(start_chapter,end_chapter,status,content,snapshot,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(start_chapter,end_chapter) DO UPDATE SET status=excluded.status,content=excluded.content,snapshot=excluded.snapshot,updated_at=excluded.updated_at",(s,e,status,content,snapshot,now()))
+    def save_section(self,s,e,status,content):
+        self.execute("INSERT INTO story_sections(start_chapter,end_chapter,status,content,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(start_chapter,end_chapter) DO UPDATE SET status=excluded.status,content=excluded.content,updated_at=excluded.updated_at",(int(s),int(e),status or "초안",content or "",now()))
+
+    def story_subsections(self, parent_start, parent_end):
+        return self.conn.execute("SELECT * FROM story_subsections WHERE parent_start=? AND parent_end=? ORDER BY start_chapter",(int(parent_start),int(parent_end))).fetchall()
+
+    def story_subsection(self, start, end):
+        return self.conn.execute("SELECT * FROM story_subsections WHERE start_chapter=? AND end_chapter=?",(int(start),int(end))).fetchone()
+
+    def save_story_subsection(self,parent_start,parent_end,start,end,title,content,status="초안"):
+        self.execute("INSERT INTO story_subsections(parent_start,parent_end,start_chapter,end_chapter,title,content,status,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(parent_start,parent_end,start_chapter,end_chapter) DO UPDATE SET title=excluded.title,content=excluded.content,status=excluded.status,updated_at=excluded.updated_at",(int(parent_start),int(parent_end),int(start),int(end),title or "",content or "",status or "초안",now()))
+
+    def story_subsection_for_chapter(self, chapter):
+        return self.conn.execute("SELECT * FROM story_subsections WHERE start_chapter<=? AND end_chapter>=? ORDER BY start_chapter DESC LIMIT 1",(int(chapter),int(chapter))).fetchone()
+
+    def chapter_story(self, chapter):
+        return self.conn.execute("SELECT * FROM chapter_stories WHERE chapter_number=?",(int(chapter),)).fetchone()
+
+    def save_chapter_story(self,chapter,long_start,long_end,sub_start,sub_end,title,content,status="초안"):
+        self.execute("INSERT INTO chapter_stories(chapter_number,long_start,long_end,sub_start,sub_end,title,content,status,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(chapter_number) DO UPDATE SET long_start=excluded.long_start,long_end=excluded.long_end,sub_start=excluded.sub_start,sub_end=excluded.sub_end,title=excluded.title,content=excluded.content,status=excluded.status,updated_at=excluded.updated_at",(int(chapter),int(long_start),int(long_end),int(sub_start),int(sub_end),title or "",content or "",status or "초안",now()))
 
     def characters(self, limit=None, offset=0, roles=None):
         sql="SELECT * FROM characters"; args=[]; where=[]
@@ -247,6 +288,22 @@ class Database:
         self.execute("INSERT INTO timeline_events(chapter_number,story_date,title,description,location,participants,updated_at) VALUES(?,?,?,?,?,?,?)",(d.get("chapter_number"),d.get("story_date",""),d.get("title",""),d.get("description",""),d.get("location",""),d.get("participants",""),now()))
         key=d.get("chapter_number") or now()
         self._index_doc("timeline", key, " ".join(str(d.get(k,"") or "") for k in ("chapter_number","story_date","title","description","location","participants")))
+
+    def update_timeline(self, timeline_id, data):
+        self.execute(
+            "UPDATE timeline_events SET title=?, description=?, chapter_number=?, story_date=?, location=?, participants=?, updated_at=? WHERE id=?",
+            (
+                data.get("title", ""),
+                data.get("description", ""),
+                data.get("chapter_number"),
+                data.get("story_date", ""),
+                data.get("location", ""),
+                data.get("participants", ""),
+                now(),
+                int(timeline_id),
+            ),
+        )
+        self._index_doc("timeline", int(timeline_id), " ".join(str(data.get(k, "") or "") for k in ("chapter_number", "story_date", "title", "description", "location", "participants")))
     def save_major_event(self,d):
         self.execute("INSERT INTO major_events(title,start_chapter,end_chapter,description,consequence,status,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(title) DO UPDATE SET start_chapter=excluded.start_chapter,end_chapter=excluded.end_chapter,description=excluded.description,consequence=excluded.consequence,status=excluded.status,updated_at=excluded.updated_at",(d.get("title",""),d.get("start_chapter"),d.get("end_chapter"),d.get("description",""),d.get("consequence",""),d.get("status","계획"),now()))
         self._index_doc("event", d.get("title",""), " ".join(str(d.get(k,"") or "") for k in ("title","description","consequence")))
@@ -266,20 +323,6 @@ class Database:
         sql += " ORDER BY COALESCE(start_chapter,999999),id"
         if limit is not None: sql += " LIMIT ? OFFSET ?"; args.extend([int(limit),int(offset)])
         return self.conn.execute(sql,args).fetchall()
-    def summaries(self, limit=None, offset=0, start=None, end=None):
-        sql="SELECT * FROM summaries"; args=[]; where=[]
-        if start is not None: where.append("chapter_number>=?"); args.append(int(start))
-        if end is not None: where.append("chapter_number<=?"); args.append(int(end))
-        if where: sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY chapter_number"
-        if limit is not None: sql += " LIMIT ? OFFSET ?"; args.extend([int(limit),int(offset)])
-        return self.conn.execute(sql,args).fetchall()
-    def recent_summaries(self, end, limit=5):
-        return self.conn.execute("SELECT * FROM summaries WHERE chapter_number<=? ORDER BY chapter_number DESC LIMIT ?",(int(end),int(limit))).fetchall()
-    def summary(self,n): return self.conn.execute("SELECT * FROM summaries WHERE chapter_number=?",(n,)).fetchone()
-    def save_summary(self,n,summary,state=""):
-        self.execute("INSERT INTO summaries(chapter_number,summary,state_snapshot,updated_at) VALUES(?,?,?,?) ON CONFLICT(chapter_number) DO UPDATE SET summary=excluded.summary,state_snapshot=excluded.state_snapshot,updated_at=excluded.updated_at",(n,summary,state,now()))
-        self._index_doc("summary", n, f"{n}화 {summary} {state}")
     def chapter_state(self,n): return self.conn.execute("SELECT * FROM chapter_states WHERE chapter_number=?",(int(n),)).fetchone()
     def latest_chapter_state(self,before=None):
         if before is None:
@@ -295,47 +338,12 @@ class Database:
         return self.conn.execute(sql,args).fetchall()
     def save_chapter_state(self,n,summary,state,source_hash="",status="갱신완료"):
         self.execute("INSERT INTO chapter_states(chapter_number,summary,state,source_hash,status,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(chapter_number) DO UPDATE SET summary=excluded.summary,state=excluded.state,source_hash=excluded.source_hash,status=excluded.status,updated_at=excluded.updated_at",(int(n),summary or "",state or "",source_hash or "",status,now()))
-    def section_memory(self,s,e):
-        return self.conn.execute("SELECT * FROM section_memories WHERE start_chapter=? AND end_chapter=?",(int(s),int(e))).fetchone()
-    def section_memory_for_chapter(self,chapter):
-        return self.conn.execute("SELECT * FROM section_memories WHERE start_chapter<=? AND end_chapter>=? LIMIT 1",(int(chapter),int(chapter))).fetchone()
-    def section_memories(self,start=None,end=None,limit=None):
-        sql="SELECT * FROM section_memories"; args=[]; where=[]
-        if start is not None: where.append("end_chapter>=?"); args.append(int(start))
-        if end is not None: where.append("start_chapter<=?"); args.append(int(end))
-        if where: sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY start_chapter"
-        if limit is not None: sql += " LIMIT ?"; args.append(int(limit))
-        return self.conn.execute(sql,args).fetchall()
-    def save_section_memory(self,s,e,content,source_hash="",status="갱신완료"):
-        self.execute("INSERT INTO section_memories(start_chapter,end_chapter,content,source_hash,status,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(start_chapter,end_chapter) DO UPDATE SET content=excluded.content,source_hash=excluded.source_hash,status=excluded.status,updated_at=excluded.updated_at",(int(s),int(e),content or "",source_hash or "",status,now()))
-    def arc_memory(self,arc_number):
-        return self.conn.execute("SELECT * FROM arc_memories WHERE arc_number=?",(int(arc_number),)).fetchone()
-    def arc_memory_for_chapter(self,chapter):
-        return self.conn.execute("SELECT * FROM arc_memories WHERE start_chapter<=? AND end_chapter>=? LIMIT 1",(int(chapter),int(chapter))).fetchone()
-    def arc_memories(self,start=None,end=None,limit=None):
-        sql="SELECT * FROM arc_memories"; args=[]; where=[]
-        if start is not None: where.append("end_chapter>=?"); args.append(int(start))
-        if end is not None: where.append("start_chapter<=?"); args.append(int(end))
-        if where: sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY arc_number"
-        if limit is not None: sql += " LIMIT ?"; args.append(int(limit))
-        return self.conn.execute(sql,args).fetchall()
-    def save_arc_memory(self,arc_number,s,e,content,source_hash="",status="갱신완료"):
-        self.execute("INSERT INTO arc_memories(arc_number,start_chapter,end_chapter,content,source_hash,status,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(arc_number) DO UPDATE SET start_chapter=excluded.start_chapter,end_chapter=excluded.end_chapter,content=excluded.content,source_hash=excluded.source_hash,status=excluded.status,updated_at=excluded.updated_at",(int(arc_number),int(s),int(e),content or "",source_hash or "",status,now()))
     def arc_bounds(self,total,arc_count=5):
         total=max(1,int(total)); count=max(1,min(int(arc_count),total))
         base=total//count; rem=total%count; out=[]; start=1
         for i in range(1,count+1):
             size=base+(1 if i<=rem else 0); end=start+size-1; out.append((i,start,end)); start=end+1
         return out
-    def snapshot(self,scope): return self.conn.execute("SELECT * FROM snapshots WHERE scope=?",(scope,)).fetchone()
-    def latest_state_snapshot(self, before_or_equal=None):
-        """현재 프로젝트 DB에서 가장 최근 state:N 스냅샷을 반환한다."""
-        if before_or_equal is None:
-            return self.conn.execute("SELECT * FROM snapshots WHERE scope GLOB 'state:[0-9]*' ORDER BY CAST(substr(scope,7) AS INTEGER) DESC LIMIT 1").fetchone()
-        return self.conn.execute("SELECT * FROM snapshots WHERE scope GLOB 'state:[0-9]*' AND CAST(substr(scope,7) AS INTEGER) <= ? ORDER BY CAST(substr(scope,7) AS INTEGER) DESC LIMIT 1", (int(before_or_equal),)).fetchone()
-    def save_snapshot(self,scope,content): self.execute("INSERT INTO snapshots(scope,content,updated_at) VALUES(?,?,?) ON CONFLICT(scope) DO UPDATE SET content=excluded.content,updated_at=excluded.updated_at",(scope,content,now()))
     def add_idea(self,content):
         self.execute("INSERT INTO ideas(content,created_at,used) VALUES(?,?,0)",(content,now()))
         row=self.conn.execute("SELECT id FROM ideas ORDER BY id DESC LIMIT 1").fetchone()
@@ -357,29 +365,6 @@ class Database:
     def start_job(self,typ,target,provider,model):
         c=self.conn.execute("INSERT INTO ai_jobs(job_type,target,status,provider,model,started_at) VALUES(?,?,?,?,?,?)",(typ,target,"실행중",provider,model,now())); self.conn.commit(); return c.lastrowid
     def finish_job(self,jid,status,error=""): self.execute("UPDATE ai_jobs SET status=?,completed_at=?,error=? WHERE id=?",(status,now(),error,jid))
-    # ---------- Long-form intelligence ----------
-    def save_entity_state(self,kind,entity_key,chapter,state,source_hash=''):
-        self.execute("INSERT INTO entity_state_ledger(kind,entity_key,chapter_number,state,source_hash,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(kind,entity_key,chapter_number) DO UPDATE SET state=excluded.state,source_hash=excluded.source_hash,updated_at=excluded.updated_at",(str(kind),str(entity_key),int(chapter),state or '',source_hash or '',now()))
-    def entity_states_for_chapter(self,chapter,limit=100):
-        return self.conn.execute("SELECT * FROM entity_state_ledger WHERE chapter_number=? ORDER BY kind,entity_key LIMIT ?",(int(chapter),int(limit))).fetchall()
-    def entity_states_recent(self,chapter,span=10,limit=60):
-        """현재 화 직전 구간까지의 확정 엔티티 상태(컨텍스트 공급용)."""
-        return self.conn.execute("SELECT * FROM entity_state_ledger WHERE chapter_number>=? AND chapter_number<=? ORDER BY chapter_number DESC,kind,entity_key LIMIT ?",(max(1,int(chapter)-int(span)),int(chapter),int(limit))).fetchall()
-    def entity_timeline(self,kind,entity_key):
-        """단일 엔티티의 화별 상태 변화 전체(타임라인 조회용)."""
-        return self.conn.execute("SELECT * FROM entity_state_ledger WHERE kind=? AND entity_key=? ORDER BY chapter_number",(str(kind),str(entity_key))).fetchall()
-    def entity_states(self,kind=None,entity_key=None,before=None,limit=100):
-        sql="SELECT * FROM entity_state_ledger"; args=[]; where=[]
-        if kind is not None: where.append("kind=?"); args.append(str(kind))
-        if entity_key is not None: where.append("entity_key=?"); args.append(str(entity_key))
-        if before is not None: where.append("chapter_number<=?"); args.append(int(before))
-        if where: sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY chapter_number DESC,id DESC LIMIT ?"; args.append(int(limit))
-        return self.conn.execute(sql,args).fetchall()
-
-    def latest_entity_state(self,kind,entity_key,before=None):
-        if before is None: return self.conn.execute("SELECT * FROM entity_state_ledger WHERE kind=? AND entity_key=? ORDER BY chapter_number DESC LIMIT 1",(kind,entity_key)).fetchone()
-        return self.conn.execute("SELECT * FROM entity_state_ledger WHERE kind=? AND entity_key=? AND chapter_number<=? ORDER BY chapter_number DESC LIMIT 1",(kind,entity_key,int(before))).fetchone()
     def foreshadow_events(self,code=None,start=None,end=None,limit=100):
         sql="SELECT fe.*,f.code,f.title FROM foreshadow_events fe JOIN foreshadowing f ON f.id=fe.foreshadow_id"; args=[]; where=[]
         if code is not None: where.append("f.code=?"); args.append(code)
@@ -419,27 +404,46 @@ class Database:
         self.conn.commit()
 
     def rebuild_search_index(self):
-        self.conn.execute("INSERT INTO search_fts(search_fts) VALUES('delete-all')"); self.conn.execute("DELETE FROM search_documents")
-        sources=[
-            ('meta',self.conn.execute("SELECT key,value FROM meta"),lambda r:f"{r['key']} {r['value']}"),
-            ('plan',self.conn.execute("SELECT id,content FROM plans"),lambda r:f"마스터 기획 {r['content']}"),
-            ('contract',self.conn.execute("SELECT id,content FROM contract"),lambda r:f"핵심 기준 {r['content']}"),
-            ('section',self.conn.execute("SELECT section,content FROM section_contents"),lambda r:f"{r['section']} {r['content']}"),
-            ('plot',self.conn.execute("SELECT chapter_number,title,content FROM chapter_plans"),lambda r:f"{r['chapter_number']}화 {r['title']} {r['content']}"),
-            ('character',self.conn.execute("SELECT id,name,role,profile,personality,goal,secret FROM characters"),lambda r:f"{r['name']} {r['role']} {r['profile']} {r['personality']} {r['goal']} {r['secret']}"),
-            ('world',self.conn.execute("SELECT id,name,category,description,rules FROM world_entities"),lambda r:f"{r['name']} {r['category']} {r['description']} {r['rules']}"),
-            ('foreshadow',self.conn.execute("SELECT id,code,title,public_info,author_truth,notes FROM foreshadowing"),lambda r:f"{r['code']} {r['title']} {r['public_info']} {r['author_truth']} {r['notes']}"),
-            ('timeline',self.conn.execute("SELECT id,title,description,location,participants FROM timeline_events"),lambda r:f"{r['title']} {r['description']} {r['location']} {r['participants']}"),
-            ('event',self.conn.execute("SELECT id,title,description,consequence FROM major_events"),lambda r:f"{r['title']} {r['description']} {r['consequence']}"),
-            ('summary',self.conn.execute("SELECT chapter_number,summary,state_snapshot FROM summaries"),lambda r:f"{r['chapter_number']}화 {r['summary']} {r['state_snapshot']}"),
-        ]
-        for cat,rows,fmt in sources:
-            for r in rows:
-                key=r['chapter_number'] if 'chapter_number' in r.keys() else r['id']
+        if not self._table_exists("search_documents") or not self._table_exists("search_fts"):
+            return
+        try:
+            self.conn.execute("INSERT INTO search_fts(search_fts) VALUES('delete-all')")
+        except Exception:
+            pass
+        self.conn.execute("DELETE FROM search_documents")
+        source_specs = {
+            "meta": ("SELECT key,value FROM meta", lambda r: f"{r['key']} {r['value']}"),
+            "plan": ("SELECT id,content FROM plans", lambda r: f"마스터 기획 {r['content']}"),
+            "contract": ("SELECT id,content FROM contract", lambda r: f"핵심 기준 {r['content']}"),
+            "section": ("SELECT section,content FROM section_contents", lambda r: f"{r['section']} {r['content']}"),
+            "story": ("SELECT start_chapter,end_chapter,content FROM story_sections", lambda r: f"{r['start_chapter']}~{r['end_chapter']}화 {r['content']}"),
+            "substory": ("SELECT start_chapter,end_chapter,title,content FROM story_subsections", lambda r: f"{r['start_chapter']}~{r['end_chapter']}화 {r['title']} {r['content']}"),
+            "chapter_story": ("SELECT chapter_number,title,content FROM chapter_stories", lambda r: f"{r['chapter_number']}화 {r['title']} {r['content']}"),
+            "character": ("SELECT id,name,role,profile,personality,goal,secret FROM characters", lambda r: f"{r['name']} {r['role']} {r['profile']} {r['personality']} {r['goal']} {r['secret']}"),
+            "world": ("SELECT id,name,category,description,rules FROM world_entities", lambda r: f"{r['name']} {r['category']} {r['description']} {r['rules']}"),
+            "foreshadow": ("SELECT id,code,title,public_info,author_truth,notes FROM foreshadowing", lambda r: f"{r['code']} {r['title']} {r['public_info']} {r['author_truth']} {r['notes']}"),
+            "timeline": ("SELECT id,title,description,location,participants FROM timeline_events", lambda r: f"{r['title']} {r['description']} {r['location']} {r['participants']}"),
+            "event": ("SELECT id,title,description,consequence FROM major_events", lambda r: f"{r['title']} {r['description']} {r['consequence']}"),
+            "end_state": ("SELECT chapter_number,state,status FROM chapter_states", lambda r: f"{r['chapter_number']}화 {r['status']} {r['state']}"),
+            "idea": ("SELECT id,content FROM ideas", lambda r: f"{r['content']}"),
+            "chapter": ("SELECT number,title,status FROM chapters", lambda r: f"{r['number']}화 {r['title']} {r['status']}"),
+        }
+        for cat,(sql,fmt) in source_specs.items():
+            if not self._table_exists(sql.split()[3]):
+                continue
+            for r in self.conn.execute(sql):
+                keys=r.keys()
+                key = r['chapter_number'] if 'chapter_number' in keys else (r['id'] if 'id' in keys else f"{cat}:{len(self.conn.execute('SELECT 1 FROM search_documents').fetchall())}")
                 self.conn.execute("INSERT INTO search_documents(category,ref_key,content,updated_at) VALUES(?,?,?,?)",(cat,str(key),fmt(r),now()))
         self.conn.commit()
-        try:self.conn.execute("INSERT INTO search_fts(search_fts) VALUES('rebuild')"); self.conn.commit()
-        except Exception: pass
+        try:
+            self.conn.execute("INSERT INTO search_fts(search_fts) VALUES('rebuild')")
+            self.conn.commit()
+        except Exception:
+            pass
+
+    def _table_exists(self, name):
+        return self.conn.execute("SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?",(name,)).fetchone() is not None
 
     def search(self,q,limit=50):
         """FTS5 우선 검색. 한국어/특수어 등 MATCH가 실패하면 LIKE로 안전하게 fallback."""
@@ -474,12 +478,15 @@ class Database:
         except Exception:
             pass
         # Index가 비어 있거나 FTS가 특정 입력을 해석하지 못하면 기존 LIKE 검색 사용.
-        specs=[("작품","meta",["key","value"]),("화별 플롯","chapter_plans",["chapter_number","title","content"]),("인물","characters",["name","role","profile","personality","goal","secret"]),("세계관","world_entities",["name","category","description","rules"]),("복선","foreshadowing",["code","title","public_info","author_truth","notes"]),("시간축","timeline_events",["chapter_number","story_date","title","description","location"]),("핵심 사건","major_events",["title","description","consequence"]),("요약","summaries",["chapter_number","summary","state_snapshot"]),("아이디어","ideas",["content"]),("설정","section_contents",["section","content"])]
+        specs=[("작품","meta",["key","value"]),("장기 스토리","story_sections",["start_chapter","end_chapter","content"]),("세부 스토리","story_subsections",["start_chapter","end_chapter","title","content"]),("화별 스토리","chapter_stories",["chapter_number","title","content"]),("인물","characters",["name","role","profile","personality","goal","secret"]),("세계관","world_entities",["name","category","description","rules"]),("복선","foreshadowing",["code","title","public_info","author_truth","notes"]),("시간축","timeline_events",["chapter_number","story_date","title","description","location"]),("핵심 사건","major_events",["title","description","consequence"]),("화 종료 상태","chapter_states",["chapter_number","state","status"]),("아이디어","ideas",["content"]),("설정","section_contents",["section","content"])]
         for token in tokens:
             like=f"%{token}%"
             for label,table,cols in specs:
                 where=" OR ".join([f"CAST({c} AS TEXT) LIKE ?" for c in cols])
-                try: rows=self.conn.execute(f"SELECT * FROM {table} WHERE {where} LIMIT ?",[like]*len(cols)+[int(limit)]).fetchall()
+                try:
+                    if not self._table_exists(table):
+                        continue
+                    rows=self.conn.execute(f"SELECT * FROM {table} WHERE {where} LIMIT ?",[like]*len(cols)+[int(limit)]).fetchall()
                 except Exception: rows=[]
                 for r in rows:
                     key=(table,tuple(r))

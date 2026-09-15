@@ -1,8 +1,7 @@
 """서비스 구현체."""
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from novel_studio.ai.context import ContextManager
 from novel_studio.ai.engine import AIEngine
@@ -10,11 +9,8 @@ from novel_studio.ai.provider_manager import ProviderManager
 from novel_studio.continuity.checker import ContinuityChecker
 from novel_studio.core.app_settings import AppSettings
 from novel_studio.core.project import ProjectManager
-from novel_studio.db.database import now
-from novel_studio.db.threadsafe_database import ThreadSafeDatabase as Database
-from novel_studio.intelligence.ledger import StateLedger
+from novel_studio.db.project_database import ProjectDatabase
 from novel_studio.manuscript.chapter_writer import ChapterWriter
-from novel_studio.memory.memory_manager import MemoryManager
 from novel_studio.plot.plot_manager import PlotManager
 from novel_studio.utils.text import count_chars
 from novel_studio.services.interfaces import (
@@ -25,7 +21,6 @@ from novel_studio.services.interfaces import (
     ContinuityService,
     DatabaseService,
     ExportService,
-    MemoryService,
     ProjectService,
     SettingsService,
     WritingService,
@@ -33,7 +28,7 @@ from novel_studio.services.interfaces import (
 
 
 class ProjectServiceImpl(ProjectService):
-    def __init__(self, project_manager: ProjectManager, db: Database) -> None:
+    def __init__(self, project_manager: ProjectManager, db: ProjectDatabase) -> None:
         self.pm = project_manager
         self.db = db
 
@@ -124,7 +119,7 @@ class AIServiceImpl(AIService):
 
 
 class DatabaseServiceImpl(DatabaseService):
-    def __init__(self, db: Database, project_manager: ProjectManager) -> None:
+    def __init__(self, db: ProjectDatabase, project_manager: ProjectManager) -> None:
         self.db = db
         self.pm = project_manager
 
@@ -143,8 +138,11 @@ class DatabaseServiceImpl(DatabaseService):
         ]
 
     def get_chapter_content(self, chapter: int) -> str:
-        row = self.db.chapter(chapter)
-        return row["content"] if row else ""
+        # 원고 본문은 chapters/NNN.txt가 정본이다. DB chapters 테이블에는 본문을 저장하지 않는다.
+        try:
+            return self.pm.load_chapter(chapter)
+        except Exception:
+            return ""
 
     def save_chapter(self, chapter: int, content: str) -> None:
         text = content or ""
@@ -157,14 +155,19 @@ class DatabaseServiceImpl(DatabaseService):
             count_chars(text), count_chars(text, True), target
         )
 
-    def get_chapter_plan(self, chapter: int) -> Optional[str]:
-        row = self.db.chapter_plan(chapter)
+    def get_chapter_story(self, chapter: int) -> Optional[str]:
+        row = self.db.chapter_story(chapter)
         return row["content"] if row else None
 
-    def save_chapter_plan(
+    def save_chapter_story(
         self, chapter: int, title: str, content: str, status: str
     ) -> None:
-        self.db.save_chapter_plan(chapter, title, content, status)
+        row = self.db.chapter_story(chapter)
+        long_start = int(row["long_start"]) if row else 0
+        long_end = int(row["long_end"]) if row else 0
+        sub_start = int(row["sub_start"]) if row else 0
+        sub_end = int(row["sub_end"]) if row else 0
+        self.db.save_chapter_story(chapter, long_start, long_end, sub_start, sub_end, title, content, status)
 
     def get_continuity_checks(self, chapter: int) -> List[ContinuityResult]:
         rows = self.db.continuity_for_chapter(chapter)
@@ -296,24 +299,6 @@ class WritingServiceImpl(WritingService):
         return self.writer.adjust(text, target, tolerance)
 
 
-class MemoryServiceImpl(MemoryService):
-    def __init__(self, memory_manager: MemoryManager, db: Database) -> None:
-        self.memory = memory_manager
-        self.db = db
-
-    def update_memory(self, chapter: int, text: str, previous_state: str) -> tuple:
-        return self.memory.update(chapter, text, previous_state)
-
-    def get_memory_notes(self) -> str:
-        return self.db.get_meta("memory_notes", "")
-
-    def save_memory_notes(self, notes: str) -> bool:
-        if not notes.strip():
-            return False
-        self.db.set_meta("memory_notes", notes)
-        return True
-
-
 class ExportServiceImpl(ExportService):
     def __init__(self, project_manager: ProjectManager) -> None:
         self.pm = project_manager
@@ -321,42 +306,3 @@ class ExportServiceImpl(ExportService):
     def export_manuscript(self) -> str:
         return self.pm.export_all_chapters()
 
-
-def create_services(project_root: str | Path) -> Dict[str, object]:
-    """서비스 팩토리 호환 함수."""
-    root = Path(project_root)
-    pm = ProjectManager()
-    pm.open(root)
-    app = AppSettings()
-    db = Database(root / "novel.db")
-    total = int(pm.settings.get("target_chapters", 500))
-    target = int(pm.settings.get("chapter_chars", 5000))
-    db.ensure_chapters(total, target)
-    providers = ProviderManager(app)
-    ai = AIEngine(providers, app)
-    context = ContextManager(db, pm, app)
-    plot = PlotManager(db, ai, pm)
-    checker = ContinuityChecker(db, ai, context)
-    writer = ChapterWriter(db, ai, pm, context)
-    memory = MemoryManager(db, ai, StateLedger(db))
-    return {
-        "project": ProjectServiceImpl(pm, db),
-        "ai": AIServiceImpl(ai),
-        "db": DatabaseServiceImpl(db, pm),
-        "context": ContextServiceImpl(context),
-        "settings": SettingsServiceImpl(app, providers),
-        "continuity": ContinuityServiceImpl(checker, plot),
-        "writing": WritingServiceImpl(writer, ai, checker),
-        "memory": MemoryServiceImpl(memory, db),
-        "export": ExportServiceImpl(pm),
-        "_db": db,
-        "_pm": pm,
-        "_app": app,
-        "_providers": providers,
-        "_ai": ai,
-        "_context": context,
-        "_plot": plot,
-        "_checker": checker,
-        "_writer": writer,
-        "_memory": memory,
-    }
