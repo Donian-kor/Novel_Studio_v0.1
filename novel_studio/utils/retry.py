@@ -37,7 +37,8 @@ def is_retryable_error(exception: Exception, retryable_exceptions: Tuple[Type[Ex
     if isinstance(exception, (TimeoutError, ConnectionError, OSError)):
         return True
 
-    return True
+    logger.debug(f"재시도 가능 여부 미확인 예외: {exception!r}, 기본 재시도 불가")
+    return False
 
 
 def get_retry_after(exception: Exception) -> Optional[float]:
@@ -111,6 +112,10 @@ def retry_with_backoff(
                         )
                         raise
 
+                    # 취소 확인 (재시도 가능 여부와 무관하게 즉시 처리)
+                    if cancel_check is not None and cancel_check():
+                        raise JobCancelled()
+
                     # 재시도 가능한 예외인지 확인
                     if not is_retryable_error(e, retryable_exceptions):
                         logger.debug(f"{func.__name__} 재시도 불가 예외: {e}")
@@ -179,6 +184,10 @@ def retry_stream_with_backoff(
                         raise
 
                     last_exception = e
+
+                    # 취소 확인 (재시도 가능 여부와 무관하게 즉시 처리)
+                    if cancel_check is not None and cancel_check():
+                        raise JobCancelled()
 
                     if attempt >= max_retries:
                         logger.warning(f"스트리밍 최대 재시도 횟수 초과: {e}")

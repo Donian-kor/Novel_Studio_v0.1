@@ -218,7 +218,7 @@ class ProjectDatabase:
         # 이미 분리된 v1.5.0 DB에서 chapter_plans를 변환할 수 있는 경우에만 수행한다.
         old=self._dbs["story"]
         try:
-            if old._base._table_exists("chapter_plans"):
+            if old.table_exists("chapter_plans"):
                 rows=old.conn.execute("SELECT chapter_number,title,content,status FROM chapter_plans ORDER BY chapter_number").fetchall()
                 for r in rows:
                     n=int(r["chapter_number"])
@@ -229,7 +229,7 @@ class ProjectDatabase:
                     old.save_chapter_story(n,ls,le,ss,se,r["title"] or f"{n}화",r["content"] or "",r["status"] or "초안")
                 old.execute('DROP TABLE IF EXISTS chapter_plans')
             old.execute('DROP TABLE IF EXISTS snapshots')
-            if old._base._table_exists("story_sections"):
+            if old.table_exists("story_sections"):
                 cols=[r[1] for r in old.conn.execute("PRAGMA table_info(story_sections)").fetchall()]
                 if "snapshot" in cols:
                     old.conn.execute("ALTER TABLE story_sections RENAME TO story_sections_v150")

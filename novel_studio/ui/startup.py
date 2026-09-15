@@ -47,7 +47,7 @@ class StartupDialog(QDialog):
         if root.exists() and (root/'project.json').exists(): QMessageBox.warning(self,'이미 존재','같은 이름의 프로젝트가 이미 있습니다. 다른 작품명을 사용하세요.'); return
         try:
             genre = self.genreEdit.currentText().strip() if hasattr(self.genreEdit, 'currentText') else self.genreEdit.text().strip()
-            pm=ProjectManager(); pm.create(root=root, title=title, genre=genre or '선협', mood=self.moodEdit.text().strip() or '진중하고 어두운 분위기', total_chapters=self.totalSpin.value(), chapter_chars=self.charSpin.value(), tolerance=self.tolSpin.value(), section_size=self.subStorySpin.value(), long_story_size=self.longStorySpin.value(), sub_story_size=self.subStorySpin.value()); db=ProjectDatabase(root); db.ensure_chapters(self.totalSpin.value(),self.charSpin.value()); db.close(); self.selected_project=root; self.accept()
+            pm=ProjectManager(); pm.create(root=root, title=title, genre=genre or '선협', mood=self.moodEdit.text().strip() or '진중하고 어두운 분위기', total_chapters=self.totalSpin.value(), chapter_chars=self.charSpin.value(), tolerance=self.tolSpin.value(), section_size=self.longStorySpin.value(), long_story_size=self.longStorySpin.value(), sub_story_size=self.subStorySpin.value()); db=ProjectDatabase(root); db.ensure_chapters(self.totalSpin.value(),self.charSpin.value()); db.close(); self.selected_project=root; self.accept()
         except Exception as e: QMessageBox.critical(self,'생성 실패',str(e))
     def open_existing(self):
         path=QFileDialog.getExistingDirectory(self,'기존 Novel Studio 프로젝트 선택')

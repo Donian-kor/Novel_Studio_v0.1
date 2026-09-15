@@ -4,8 +4,7 @@ from novel_studio.ai.prompts import state
 from novel_studio.utils.cancellation import JobCancelled
 
 class EndStateService:
-    """화 종료 상태를 생성하고 저장하는 서비스."""
-    """실제 원고에서 다음 화에 필요한 종료 상태만 생성한다."""
+    """화 종료 상태를 생성하고 저장하는 서비스. 실제 원고에서 다음 화에 필요한 종료 상태만 생성한다."""
     def __init__(self, db, ai):
         self.db, self.ai = db, ai
 

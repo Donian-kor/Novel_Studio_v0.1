@@ -41,6 +41,9 @@ class ThreadSafeDatabase:
 
         return locked_method
 
+    def table_exists(self, name: str) -> bool:
+        return self._base._table_exists(name)
+
     def execute(self, sql: str, args=()):
         """쓰기 SQL을 직렬화하고 즉시 커밋한다."""
         with self._lock:

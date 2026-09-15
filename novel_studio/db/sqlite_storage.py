@@ -8,7 +8,9 @@ def now():
 
 # 현재 스키마 버전. 스키마 변경 시 MIGRATIONS에 새 단계를 추가하고 버전을 올린다.
 CURRENT_SCHEMA_VERSION = 4
-MIGRATIONS = {4: ""}
+# 4단계: 구조 변경 없음. 테이블은 _schema()에서 생성되므로 마이그레이션 SQL이 필요 없다.
+# 구버전 DB의 누락 오브젝트는 _schema() 내 CREATE TABLE IF NOT EXISTS로 보완된다.
+MIGRATIONS = {4: "PRAGMA user_version = 4;"}
 
 class SQLiteStorage:
     SCHEMA_PROFILES = {
