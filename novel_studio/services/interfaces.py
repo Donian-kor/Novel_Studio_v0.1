@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 @dataclass
 class ChapterInfo:
-    """화 정보 데이터 클래스"""
+    """화 정보를 저장하는 데이터 클래스."""
     number: int
     title: str
     status: str
@@ -19,7 +19,7 @@ class ChapterInfo:
 
 @dataclass
 class EntityState:
-    """엔티티 상태 데이터 클래스"""
+    """엔티티 상태를 저장하는 데이터 클래스."""
     kind: str
     entity_key: str
     chapter_number: int
@@ -30,7 +30,7 @@ class EntityState:
 
 @dataclass
 class ContinuityResult:
-    """연속성 검사 결과"""
+    """연속성 검사 결과를 저장하는 데이터 클래스."""
     chapter: int
     severity: str
     category: str
@@ -39,7 +39,7 @@ class ContinuityResult:
 
 
 class ProjectService(ABC):
-    """프로젝트 관리 서비스"""
+    """프로젝트 관리 서비스 계약."""
     
     @abstractmethod
     def get_settings(self) -> dict:
@@ -70,12 +70,12 @@ class ProjectService(ABC):
 
 
 class AIService(ABC):
-    """AI 서비스"""
+    """AI 서비스 계약."""
     
     @abstractmethod
     def generate(self, prompt: str, *, temperature: float = 0.7, 
                  max_tokens: int = 2000, timeout: int = 60) -> str:
-        """단일 생성"""
+        """단일 AI 생성을 수행한다."""
         pass
     
     @abstractmethod
@@ -86,47 +86,47 @@ class AIService(ABC):
     
     @abstractmethod
     def list_models(self) -> list:
-        """사용 가능한 모델 목록"""
+        """사용 가능한 모델 목록을 반환한다."""
         pass
 
 
 class DatabaseService(ABC):
-    """데이터베이스 서비스"""
+    """데이터베이스 서비스 계약."""
     
     @abstractmethod
     def get_chapters(self) -> List[ChapterInfo]:
-        """전체 화 목록 조회"""
+        """전체 화 목록을 조회한다."""
         pass
     
     @abstractmethod
     def get_chapter_content(self, chapter: int) -> str:
-        """화 내용 조회"""
+        """화 원고를 조회한다."""
         pass
     
     @abstractmethod
     def save_chapter(self, chapter: int, content: str) -> None:
-        """화 내용 저장"""
+        """화 원고를 저장한다."""
         pass
     
     @abstractmethod
     def get_chapter_story(self, chapter: int) -> Optional[str]:
-        """화별 스토리 조회"""
+        """화별 스토리를 조회한다."""
         pass
     
     @abstractmethod
     def save_chapter_story(self, chapter: int, title: str, content: str, status: str) -> None:
-        """화별 스토리 저장"""
+        """화별 스토리를 저장한다."""
         pass
     
     @abstractmethod
     def get_continuity_checks(self, chapter: int) -> List[ContinuityResult]:
-        """연속성 검사 결과 조회"""
+        """연속성 검사 결과를 조회한다."""
         pass
     
     @abstractmethod
     def add_continuity_check(self, chapter: int, severity: str, 
                              category: str, message: str, evidence: str) -> None:
-        """연속성 검사 결과 저장"""
+        """연속성 검사 결과를 저장한다."""
         pass
 
 
@@ -135,66 +135,66 @@ class ContextService(ABC):
     
     @abstractmethod
     def build_context(self, chapter: int, extra: str = '') -> str:
-        """컨텍스트 구성"""
+        """AI 컨텍스트를 구성한다."""
         pass
     
     @abstractmethod
     def get_token_budget(self) -> int:
-        """토큰 예산 조회"""
+        """토큰 예산을 조회한다."""
         pass
 
 
 class SettingsService(ABC):
-    """설정 관리 서비스"""
+    """설정 관리 서비스 계약."""
     
     @abstractmethod
     def get_active_provider(self) -> str:
-        """활성 Provider ID 반환"""
+        """활성 Provider ID를 반환한다."""
         pass
     
     @abstractmethod
     def get_provider_config(self, provider_id: str) -> dict:
-        """Provider 설정 조회"""
+        """Provider 설정을 조회한다."""
         pass
     
     @abstractmethod
     def save_provider_config(self, provider_id: str, config: dict) -> None:
-        """Provider 설정 저장"""
+        """Provider 설정을 저장한다."""
         pass
     
     @abstractmethod
     def get_ai_settings(self) -> dict:
-        """AI 설정 전체 반환"""
+        """AI 설정 전체를 반환한다."""
         pass
 
 
 class ContinuityService(ABC):
-    """연속성 검사 서비스"""
+    """연속성 검사 서비스 계약."""
     
     @abstractmethod
     def check_chapter(self, chapter: int, text: str) -> ContinuityResult:
-        """단일 화 연속성 검사"""
+        """단일 화의 연속성을 검사한다."""
         pass
     
     @abstractmethod
     def audit_long_form(self, size: int = 50, 
                         progress_callback=None, 
                         cancelled_check=None) -> str:
-        """장편 연속성 검사"""
+        """장편 연속성을 검사한다."""
         pass
 
 
 class WritingService(ABC):
-    """집필/윤문 서비스"""
+    """집필과 윤문 서비스 계약."""
     
     @abstractmethod
     def write_chapter(self, chapter: int, stream_callback=None) -> str:
-        """화 집필 (스트리밍 지원)"""
+        """화 집필을 수행하고 스트리밍을 지원한다."""
         pass
     
     @abstractmethod
     def revise_chapter(self, text: str) -> str:
-        """윤문"""
+        """원고를 윤문한다."""
         pass
     
     @abstractmethod

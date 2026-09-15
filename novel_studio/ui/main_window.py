@@ -6,7 +6,7 @@ import subprocess
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QListWidget,
                                  QStackedWidget, QLabel, QPushButton, QFrame,
                                  QPlainTextEdit, QTextBrowser, QDialog, QComboBox)
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, QByteArray
 from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor
 from novel_studio.ui.loader import load_ui
 from novel_studio.ui.views.planning import PlanningView
@@ -39,7 +39,7 @@ class MainWindow(QMainWindow):
     NAV=['기획','설정 DB','스토리','원고','화 종료 상태']
     def __init__(self, project_root):
         super().__init__()
-        self.setWindowTitle('Novel Studio v1.5.1')
+        self.setWindowTitle('Novel Studio v1.5.3')
         self.resize(1700, 1000)
         self.project_root = Path(project_root)
         self.current = 1
@@ -48,6 +48,7 @@ class MainWindow(QMainWindow):
         self._active_manuscript_job = None
         self._init_services()
         self._init_ui()
+        self._restore_ui_state()
         self.chat_window = ChatWindow(self)
         # 메인 창이 닫히면 독립 채팅창도 함께 닫아 앱이 정상 종료되게 한다
         try:
@@ -57,7 +58,7 @@ class MainWindow(QMainWindow):
         self._save_last_project()
         self._load_all()
         self._build_project_menu()
-    def _init_services(self):
+    def _init_services(self) -> None:
         """프로젝트 구성요소를 ServiceFactory에서 한 번만 생성한다."""
         from novel_studio.factories import ServiceFactory
 
@@ -81,15 +82,15 @@ class MainWindow(QMainWindow):
         self.controller.set_main_window(self)
         self._connect_controller_signals()
         
-    def _connect_controller_signals(self):
-        """Connect Controller signals to UI updates."""
+    def _connect_controller_signals(self) -> None:
+        """Controller 신호를 UI 갱신 함수에 연결한다."""
         self.controller.status_changed.connect(self._on_controller_status)
         self.controller.progress_updated.connect(self._on_progress_update)
         self.controller.chapter_changed.connect(self._on_chapter_changed)
         self.controller.ai_status_changed.connect(self._update_ai_status)
         self.controller.error_occurred.connect(self._error)
     
-    def _error(self, error):
+    def _error(self, error: object) -> None:
         """Controller에서 전달된 작업 오류를 UI에 표시한다.
 
         Controller의 error_occurred 시그널은 예외 객체 또는 문자열을
@@ -103,65 +104,171 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(message)
         QMessageBox.critical(self, '작업 오류', message)
 
-    def _on_controller_status(self, message: str):
+    def _on_controller_status(self, message: str) -> None:
         self.statusBar().showMessage(message)
         if hasattr(self, 'stopBtn') and self.stopBtn is not None:
             self.stopBtn.setEnabled(self.controller.busy or self._busy)
 
-    def _on_progress_update(self, current: int, total: int, message: str):
-        """Handle progress updates from controller."""
+    def _on_progress_update(self, current: int, total: int, message: str) -> None:
+        """Controller의 진행 상황을 상태 표시줄에 반영한다."""
         pct = int(current / max(1, total) * 100)
         self.statusBar().showMessage(f'{message} ({current}/{total}) {pct}%')
-        # Update progress in UI if needed
+        # 필요한 경우 여기에서 세부 진행률 UI를 갱신한다.
         
-    def _on_chapter_changed(self, chapter: int):
-        """Handle chapter change from controller."""
+    def _on_chapter_changed(self, chapter: int) -> None:
+        """Controller가 알려준 현재 화 변경을 화면에 반영한다."""
         self.current = chapter
         self.load_chapter(chapter)
-    def _init_ui(self):
-        self.ui=load_ui('main_window.ui'); self.setCentralWidget(self.ui); self.nav=self.ui.findChild(QListWidget,'navList'); self.stack=self.ui.findChild(QStackedWidget,'pageStack'); self.left=self.ui.findChild(QFrame,'leftPanel'); self.right=self.ui.findChild(QFrame,'rightPanel'); self.left_handle=self.ui.findChild(QFrame,'leftHandle'); self.right_handle=self.ui.findChild(QFrame,'rightHandle'); self.aiStatus=self.ui.findChild(QLabel,'aiStatus')
-        self.views=[PlanningView(self), EntitiesView(self), StoryView(self), ManuscriptView(self), EndStateView(self)]
-        self.planning_view, self.entities_view, self.story_view, self.manuscript_view, self.end_state_view = self.views
-        for v in self.views:self.stack.addWidget(v)
-        self.nav.addItems(self.NAV); self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+    def _init_ui(self) -> None:
+        """주요 UI 구성요소를 생성하고 이벤트를 연결한다."""
+        self._create_ui_base()
+        self._create_views()
+        self._connect_common_ui()
+        self._connect_planning_ui()
+        self._connect_story_ui()
+        self._connect_manuscript_ui()
+        self._connect_end_state_ui()
+        self._setup_auto_save_controls()
+        self._build_top_dashboard()
+
+    def _create_ui_base(self) -> None:
+        """기본 UI 위젯을 찾고 중앙 위젯에 연결한다."""
+        self.ui = load_ui('main_window.ui')
+        self.setCentralWidget(self.ui)
+        self.nav = self.ui.findChild(QListWidget, 'navList')
+        self.stack = self.ui.findChild(QStackedWidget, 'pageStack')
+        self.left = self.ui.findChild(QFrame, 'leftPanel')
+        self.right = self.ui.findChild(QFrame, 'rightPanel')
+        self.left_handle = self.ui.findChild(QFrame, 'leftHandle')
+        self.right_handle = self.ui.findChild(QFrame, 'rightHandle')
+        self.aiStatus = self.ui.findChild(QLabel, 'aiStatus')
         self.stopBtn = self.ui.findChild(QPushButton, 'stopBtn')
+
+    def _create_views(self) -> None:
+        """화면별 View를 생성하고 Stack에 등록한다."""
+        self.views = [
+            PlanningView(self),
+            EntitiesView(self),
+            StoryView(self),
+            ManuscriptView(self),
+            EndStateView(self),
+        ]
+        (
+            self.planning_view,
+            self.entities_view,
+            self.story_view,
+            self.manuscript_view,
+            self.end_state_view,
+        ) = self.views
+        for view in self.views:
+            self.stack.addWidget(view)
+
+    def _connect_common_ui(self) -> None:
+        """공통 탐색, 패널, 설정, 채팅, 정지 기능을 연결한다."""
+        self.nav.addItems(self.NAV)
+        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         if self.stopBtn is not None:
             self.stopBtn.clicked.connect(self._stop)
             self.stopBtn.setEnabled(False)
-        self.ui.findChild(QPushButton,'leftCollapse').clicked.connect(lambda:self._set_left(False)); self.ui.findChild(QPushButton,'leftExpand').clicked.connect(lambda:self._set_left(True)); self.ui.findChild(QPushButton,'rightCollapse').clicked.connect(lambda:self._set_right(False)); self.ui.findChild(QPushButton,'rightExpand').clicked.connect(lambda:self._set_right(True)); self.ui.findChild(QPushButton,'settingsBtn').clicked.connect(self.open_settings); self._init_conn_test_btn(); self.ui.findChild(QPushButton,'chatBtn').clicked.connect(self.open_ai_chat); self._set_left(True); self._set_right(True); self._build_top_dashboard()
+        self.ui.findChild(QPushButton, 'leftCollapse').clicked.connect(lambda: self._set_left(False))
+        self.ui.findChild(QPushButton, 'leftExpand').clicked.connect(lambda: self._set_left(True))
+        self.ui.findChild(QPushButton, 'rightCollapse').clicked.connect(lambda: self._set_right(False))
+        self.ui.findChild(QPushButton, 'rightExpand').clicked.connect(lambda: self._set_right(True))
+        self.ui.findChild(QPushButton, 'settingsBtn').clicked.connect(self.open_settings)
+        self._init_conn_test_btn()
+        self.ui.findChild(QPushButton, 'chatBtn').clicked.connect(self.open_ai_chat)
         self.saveAllBtn = self.ui.findChild(QPushButton, 'saveAllBtn')
         if self.saveAllBtn is not None:
-            # 종료 상태 작업 중 로딩 표시 후 원래 문구로 복원할 때 사용한다.
             self._save_all_btn_text = self.saveAllBtn.text()
-            # clicked(bool)의 불리언을 인자로 넘기지 않도록 람다로 감싼다.
             self.saveAllBtn.clicked.connect(lambda _checked=False: self.save_all())
-        ca = self.ui.findChild(QPushButton, 'cleanAllBtn')
-        if ca is not None:
-            ca.clicked.connect(self.clean_marks_all)
-        cbo = self.ui.findChild(QComboBox, 'autoSaveCombo')
-        if cbo is not None:
-            self.autoSaveCombo = cbo
-            for label, mins in (('자동 저장: 안 함', 0), ('자동 저장: 5분', 5), ('자동 저장: 10분', 10)):
-                cbo.addItem(label, mins)
-            try:
-                saved_min = int(self.app.data.get('editor', {}).get('auto_save_interval', 0) or 0)
-            except Exception:
-                saved_min = 0
-            idx = cbo.findData(saved_min)
-            cbo.setCurrentIndex(idx if idx >= 0 else 0)
-            cbo.currentIndexChanged.connect(self._on_auto_save_changed)
-            self._setup_auto_save(saved_min)
-        p=self.planning_view; p.masterBtn.clicked.connect(self.generate_master); p.diffMasterBtn.clicked.connect(self.preview_master_diff); p.contractBtn.clicked.connect(self.generate_contract); p.lockBtn.clicked.connect(self.lock_contract); p.masterPlotBtn.clicked.connect(self.generate_master_plot); p.saveMasterBtn.clicked.connect(self.save_master); p.saveContractBtn.clicked.connect(self.save_contract); p.savePlotBtn.clicked.connect(self.save_master_plot); p.generateBtn.clicked.connect(self.generate_idea); p.useBtn.clicked.connect(self.use_idea)
-        story=self.story_view
-        story.generateBtn.clicked.connect(self.generate_sections)
-        story.regenerateSelectedBtn.clicked.connect(self.regenerate_selected_section)
-        story.regenerateAllBtn.clicked.connect(self.regenerate_all_sections)
-        story.generateChapterBtn.clicked.connect(self.generate_chapter_stories)
-        story.regenerateChapterBtn.clicked.connect(self.regenerate_selected_chapter_story)
-        m=self.manuscript_view; m.chapterList.currentRowChanged.connect(self._on_chapter_row_changed); m.editor.textChanged.connect(self.update_count); self._wire_manuscript_buttons(m)
-        end=self.end_state_view
-        end.generateBtn.clicked.connect(self.generate_end_state_selected)
-        end.auditBtn.clicked.connect(self.audit_long_form)
+        clean_all = self.ui.findChild(QPushButton, 'cleanAllBtn')
+        if clean_all is not None:
+            clean_all.clicked.connect(self.clean_marks_all)
+
+    def _setup_auto_save_controls(self) -> None:
+        """자동 저장 선택값을 설정하고 변경 신호를 연결한다."""
+        combo = self.ui.findChild(QComboBox, 'autoSaveCombo')
+        if combo is None:
+            return
+        self.autoSaveCombo = combo
+        for label, minutes in (('자동 저장: 안 함', 0), ('자동 저장: 5분', 5), ('자동 저장: 10분', 10)):
+            combo.addItem(label, minutes)
+        try:
+            saved_minutes = int(self.app.data.get('editor', {}).get('auto_save_interval', 0) or 0)
+        except Exception:
+            saved_minutes = 0
+        index = combo.findData(saved_minutes)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.currentIndexChanged.connect(self._on_auto_save_changed)
+        self._setup_auto_save(saved_minutes)
+
+    def _connect_planning_ui(self) -> None:
+        """기획 View의 버튼 신호를 연결한다."""
+        view = self.planning_view
+        view.masterBtn.clicked.connect(self.generate_master)
+        view.diffMasterBtn.clicked.connect(self.preview_master_diff)
+        view.contractBtn.clicked.connect(self.generate_contract)
+        view.lockBtn.clicked.connect(self.lock_contract)
+        view.masterPlotBtn.clicked.connect(self.generate_master_plot)
+        view.saveMasterBtn.clicked.connect(self.save_master)
+        view.saveContractBtn.clicked.connect(self.save_contract)
+        view.savePlotBtn.clicked.connect(self.save_master_plot)
+        view.generateBtn.clicked.connect(self.generate_idea)
+        view.useBtn.clicked.connect(self.use_idea)
+
+    def _connect_story_ui(self) -> None:
+        """스토리 View의 생성 및 재생성 버튼을 연결한다."""
+        view = self.story_view
+        view.generateBtn.clicked.connect(self.generate_sections)
+        view.regenerateSelectedBtn.clicked.connect(self.regenerate_selected_section)
+        view.regenerateAllBtn.clicked.connect(self.regenerate_all_sections)
+        view.generateChapterBtn.clicked.connect(self.generate_chapter_stories)
+        view.regenerateChapterBtn.clicked.connect(self.regenerate_selected_chapter_story)
+
+    def _connect_manuscript_ui(self) -> None:
+        """원고 View의 화 선택, 편집, 버튼 이벤트를 연결한다."""
+        view = self.manuscript_view
+        view.chapterList.currentRowChanged.connect(self._on_chapter_row_changed)
+        view.editor.textChanged.connect(self.update_count)
+        self._wire_manuscript_buttons(view)
+
+    def _connect_end_state_ui(self) -> None:
+        """화 종료 상태 View의 생성 및 검증 버튼을 연결한다."""
+        view = self.end_state_view
+        view.generateBtn.clicked.connect(self.generate_end_state_selected)
+        view.auditBtn.clicked.connect(self.audit_long_form)
+
+    def _restore_ui_state(self) -> None:
+        """저장된 창 크기, 창 상태, 패널 상태, 선택 메뉴를 복원한다."""
+        try:
+            geometry = self.app.get_ui_state('geometry', '')
+            window_state = self.app.get_ui_state('window_state', '')
+            if geometry:
+                self.restoreGeometry(QByteArray.fromBase64(geometry.encode('ascii')))
+            if window_state:
+                self.restoreState(QByteArray.fromBase64(window_state.encode('ascii')))
+            self._set_left(bool(self.app.get_ui_state('left_panel_visible', True)))
+            self._set_right(bool(self.app.get_ui_state('right_panel_visible', True)))
+            selected = int(self.app.get_ui_state('selected_nav', 0) or 0)
+            if self.nav.count() and 0 <= selected < self.nav.count():
+                self.nav.setCurrentRow(selected)
+        except Exception:
+            logger.exception('UI 상태 복원 실패')
+
+    def _save_ui_state(self) -> None:
+        """현재 UI 상태를 AppSettings에 저장한다."""
+        try:
+            self.app.set_ui_state(
+                geometry=bytes(self.saveGeometry().toBase64()).decode('ascii'),
+                window_state=bytes(self.saveState().toBase64()).decode('ascii'),
+                left_panel_visible=self.left.isVisible(),
+                right_panel_visible=self.right.isVisible(),
+                selected_nav=self.nav.currentRow(),
+            )
+            self.app.save()
+        except Exception:
+            logger.exception('UI 상태 저장 실패')
+
     def _save_view_detail(self, view, label):
         try:
             ok = view.save_detail()
@@ -178,7 +285,7 @@ class MainWindow(QMainWindow):
     def _build_top_dashboard(self):
         """요청 1: 대시보드를 상단 고정 바로 교체. 사이드바에서 제거하고 항상 보이게."""
         from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel
-        root = self.ui.layout()          # main_window.ui 루: top / body / bottom
+        root = self.ui.layout()          # main_window.ui의 최상위 레이아웃은 top / body / bottom 구조다.
         bar = QFrame(self.ui)
         bar.setObjectName('dashBar')
         hl = QHBoxLayout(bar)
@@ -190,7 +297,7 @@ class MainWindow(QMainWindow):
         for w in (self.dashTitle, self.dashProgress, self.dashChars, self.dashForeshadow):
             hl.addWidget(w)
         hl.addStretch(1)
-        # top(첫째)와 body(둘째) 사이에 항상 보이는 상단 대시보드 삽입
+        # top(첫째)과 body(둘째) 사이에 항상 보이는 상단 대시보드를 삽입한다.
         root.insertWidget(1, bar)
 
     def refresh_dashboard(self):
@@ -245,7 +352,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         QMessageBox.about(
             self, 'Novel Studio 정보',
-            '<b>Novel Studio</b> v1.5.1<br><br>'
+            '<b>Novel Studio</b> v1.5.2<br><br>'
             '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
             '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
 
@@ -409,8 +516,8 @@ class MainWindow(QMainWindow):
         if cb is not None:
             cb.clicked.connect(self.open_ai_chat)
 
-    def _set_left(self,on): self.left.setVisible(on); self.left_handle.setVisible(not on)
-    def _set_right(self,on): self.right.setVisible(on); self.right_handle.setVisible(not on)
+    def _set_left(self, on: bool) -> None: self.left.setVisible(on); self.left_handle.setVisible(not on)
+    def _set_right(self, on: bool) -> None: self.right.setVisible(on); self.right_handle.setVisible(not on)
     def _run(self, label, fn, done, error_callback=None, cancelled_callback=None):
         """레거시 호출 호환용 Controller 작업 위임 래퍼.
 
@@ -439,8 +546,8 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage('실행 중인 작업이 없습니다.')
 
-    def _load_all(self): self.planning_view.refresh(); self.entities_view.refresh(); self.story_view.refresh(); self._load_chapters(); self.manuscript_view.refresh(); self.load_chapter(1); self._update_ai_status(); self.refresh_dashboard()
-    def _load_chapters(self):
+    def _load_all(self) -> None: self.planning_view.refresh(); self.entities_view.refresh(); self.story_view.refresh(); self._load_chapters(); self.manuscript_view.refresh(); self.load_chapter(1); self._update_ai_status(); self.refresh_dashboard()
+    def _load_chapters(self) -> None:
         v=self.manuscript_view
         v.chapterList.blockSignals(True)
         try:
@@ -876,6 +983,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, 'AI 기호 삭제', msg)
 
     def closeEvent(self, event):
+        self._save_ui_state()
         """창 닫을 때 현재 편집 내용과 AI 집필 중 부분 결과를 먼저 보존한다."""
         try:
             active=self._active_manuscript_job
@@ -1145,7 +1253,7 @@ class MainWindow(QMainWindow):
         self._run('AI 연속성 검사 중...', lambda: self.controller.continuity_service.check_chapter(self.current, text),
                   lambda result: done_callback(result),
                   error_callback=on_error, cancelled_callback=on_cancelled)
-        # Controller busy 거부는 _run이 상태바로 알린다.
+        # Controller가 busy 상태로 작업을 거부하면 _run이 상태바로 알린다.
     def spellcheck_current(self):
         """요청 7-1: 맞춤법 검사. py-hanspell이 있으면 사용, 없으면 AI로 대체한다."""
         t = self.manuscript_view.editor.toPlainText()
@@ -1163,7 +1271,7 @@ class MainWindow(QMainWindow):
                 self.manuscript_view.editor.setPlainText(corrected)
                 self.update_count()
             return
-        # py-hanspell 미설치 → AI 맞춤법 검사
+        # py-hanspell이 설치되어 있지 않으면 AI 맞춤법 검사를 사용한다.
         self._run('AI 맞춤법 검사 중...',
                   lambda: self.ai.generate('다음 원고의 맞춤법·띄어쓰기·문법 오류만 수정하라. '
                                             '내용과 문체는 절대 바꾸지 말고 수정된 원고 전체만 출력하라.\n' + t,
@@ -1299,8 +1407,8 @@ class MainWindow(QMainWindow):
     def apply_editor_style(self):
         s=self.app.data['editor']; v=self.manuscript_view.editor; v.setFont(QFont(str(s['font_family']),int(s['font_size']))); v.setStyleSheet(f"QPlainTextEdit{{color:{s['text_color']};background-color:{s['bg_color']};}}")
     def _update_ai_status(self):
-        # NOTE: 여기서 네트워크 I/O(list_models 등)를 하면 안 된다.
-        # LM Studio가 꺼져 있으면 UI 스레드가 타임아웃까지 멈추기 때문.
+        # 여기에서 네트워크 I/O(list_models 등)를 수행하면 안 된다.
+        # LM Studio가 꺼져 있으면 UI 스레드가 타임아웃까지 멈추기 때문이다.
         # 모델 자동 감지는 [설정 → 연결 테스트]에서만 수행하고, 여기서는 저장된 값만 표시한다.
         try:
             pid = self.app.data['active_provider']

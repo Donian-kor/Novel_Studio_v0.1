@@ -1,10 +1,18 @@
+from __future__ import annotations
+
 import threading
+from typing import Any, Callable
 
 from PySide6.QtCore import QRunnable, QObject, Signal, Slot
 from novel_studio.utils.cancellation import JobCancelled
 
+JobFunction = Callable[[], Any]
+StreamFunction = Callable[[Callable[[str], None]], Any]
+
 
 class Signals(QObject):
+    """백그라운드 작업이 UI에 상태를 전달하기 위한 Qt 신호 모음이다."""
+
     finished = Signal(object)
     error = Signal(str)
     progress = Signal(str)
@@ -12,30 +20,27 @@ class Signals(QObject):
 
 
 class Job(QRunnable):
-    """취소 가능한 백그라운드 작업
+    """취소 가능한 백그라운드 작업을 실행한다."""
 
-    - cancel(): 작업 취소 요청. 토큰을 세우고, 진행 중인 I/O는 provider가
-      토큰을 보고 연결을 끊으므로 완료까지 기다리지 않는다.
-    - is_cancelled(): 취소 상태 확인
-    - 취소된 작업의 결과는 무시됨
-    """
-
-    def __init__(self, fn):
+    def __init__(self, fn: JobFunction) -> None:
         super().__init__()
         self.fn = fn
         self.signals = Signals()
         self._cancelled = False
         self._cancel_event = threading.Event()
 
-    def cancel(self):
+    def cancel(self) -> None:
+        """작업 취소를 요청하고 취소 이벤트를 설정한다."""
         self._cancelled = True
         self._cancel_event.set()
 
     def is_cancelled(self) -> bool:
+        """현재 작업이 취소 요청을 받았는지 반환한다."""
         return self._cancelled
 
     @Slot()
-    def run(self):
+    def run(self) -> None:
+        """작업을 실행하고 완료·오류·취소 신호 중 하나를 보낸다."""
         if self._cancelled:
             self.signals.cancelled.emit()
             return
@@ -47,34 +52,34 @@ class Job(QRunnable):
                 self.signals.finished.emit(result)
         except JobCancelled:
             self.signals.cancelled.emit()
-        except Exception as e:
+        except Exception as exc:
             if self._cancelled:
                 self.signals.cancelled.emit()
             else:
-                self.signals.error.emit(str(e))
+                self.signals.error.emit(str(exc))
 
 
 class StreamJob(Job):
-    """토큰 스트리밍 작업.
+    """토큰을 순차적으로 전달하는 취소 가능한 백그라운드 작업이다."""
 
-    fn(callback) 형태로 받는다. fn은 생성되는 토큰마다 callback(token)을
-    호출하며(→ progress 시그널 방출), 마지막에 전체 텍스트를 return한다.
-    """
+    def __init__(self, fn: StreamFunction) -> None:
+        super().__init__(fn)
 
     @Slot()
-    def run(self):
+    def run(self) -> None:
+        """스트리밍 작업을 실행하고 토큰마다 진행 신호를 보낸다."""
         if self._cancelled:
             self.signals.cancelled.emit()
             return
-        collected = []
+        collected: list[str] = []
 
-        def on_token(t):
+        def on_token(token: str) -> None:
             if self._cancelled:
                 raise JobCancelled()
-            if not t:
+            if not token:
                 return
-            collected.append(t)
-            self.signals.progress.emit(t)
+            collected.append(token)
+            self.signals.progress.emit(token)
 
         try:
             total = self.fn(on_token) or ''.join(collected)
@@ -84,8 +89,8 @@ class StreamJob(Job):
                 self.signals.finished.emit(total)
         except JobCancelled:
             self.signals.cancelled.emit()
-        except Exception as e:
+        except Exception as exc:
             if self._cancelled:
                 self.signals.cancelled.emit()
             else:
-                self.signals.error.emit(str(e))
+                self.signals.error.emit(str(exc))

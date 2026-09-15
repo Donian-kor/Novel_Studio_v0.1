@@ -105,10 +105,10 @@ class NovelController(QObject):
         self._busy = False
         self._current_job = None
         self._active_stream_callback = None
-        # If there are queued jobs, start the next one
+        # 대기 중인 작업이 있으면 다음 작업을 시작한다.
         if self._job_queue:
             queued = self._job_queue.pop(0)
-            if queued[5]:  # is_stream True
+            if queued[5]:  # is_stream=True인 스트리밍 작업이다.
                 label, fn, done_cb, error_cb, cancelled_cb, _, progress_cb = queued
                 self._run_stream(label, fn, done_cb, progress_cb, error_cb, cancelled_cb)
             else:
@@ -125,12 +125,12 @@ class NovelController(QObject):
     ) -> bool:
         """일반 작업을 단일 실행 경로로 처리한다."""
         if self._busy:
-            # Queue the job to run after current job finishes
+            # 현재 작업이 끝난 뒤 실행하도록 작업을 대기열에 넣는다.
             self._job_queue.append((
                 label, fn, done_callback, error_callback, cancelled_callback,
-                False  # is_stream = False
+                False  # is_stream=False인 일반 작업이다.
             ))
-            return True  # Indicate job is queued (will be run later)
+            return True  # 작업이 대기열에 등록되었음을 표시한다.
 
         job = Job(fn)
         job.signals.finished.connect(lambda result: self._on_job_done(done_callback, result))
@@ -150,13 +150,13 @@ class NovelController(QObject):
     ) -> bool:
         """스트리밍 작업을 Controller가 일관되게 관리한다."""
         if self._busy:
-            # Queue the job to run after current job finishes
+            # 현재 작업이 끝난 뒤 실행하도록 작업을 대기열에 넣는다.
             self._job_queue.append((
                 label, fn, done_callback, error_callback, cancelled_callback,
-                True,  # is_stream = True
-                progress_callback  # store progress_callback
+                True,  # 스트리밍 작업임을 표시한다.
+                progress_callback  # 진행 상황 콜백을 저장한다.
             ))
-            return True  # Indicate job is queued
+            return True  # 작업이 대기열에 등록되었음을 표시한다.
 
         job = StreamJob(fn)
         self._active_stream_callback = progress_callback
@@ -245,7 +245,7 @@ class NovelController(QObject):
             return False
         job.cancel()
         self._cancel_token.set()
-        # 진행 중인 HTTP 응답 close (worker 스레드의 read/readline을 깨운다)
+        # 진행 중인 HTTP 응답을 닫아 worker 스레드의 read/readline 대기를 깨운다.
         ai_service = getattr(self, "ai_service", None)
         abort = getattr(ai_service, "abort", None)
         if callable(abort):

@@ -36,7 +36,7 @@ class SQLiteStorage:
         try:
             conn.commit()
             try:
-                # 열린 cursor/연결이 남아 있지 않을 때 WAL을 즉시 정리한다.
+                # 열린 cursor/연결이 남아 있지 않을 때 SQLite 보조 파일을 정리한다.
                 conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             except sqlite3.Error:
                 pass
@@ -112,7 +112,7 @@ class SQLiteStorage:
         names = {str(r[0]) for r in rows}
         self.conn.execute("PRAGMA foreign_keys=OFF")
         try:
-            # virtual FTS table and backing table must be pruned together.
+            # 가상 FTS 테이블과 원본 테이블은 함께 정리해야 한다.
             protected = set(allowed) | {'schema_meta'} | {n for n in names if n.startswith('search_fts_')}
             for name in sorted(names - protected, reverse=True):
                 try:
@@ -477,7 +477,7 @@ class SQLiteStorage:
                 if len(out)>=int(limit): return out
         except Exception:
             pass
-        # Index가 비어 있거나 FTS가 특정 입력을 해석하지 못하면 기존 LIKE 검색 사용.
+        # 색인이 비어 있거나 FTS가 특정 입력을 해석하지 못하면 기존 LIKE 검색을 사용한다.
         specs=[("작품","meta",["key","value"]),("장기 스토리","story_sections",["start_chapter","end_chapter","content"]),("세부 스토리","story_subsections",["start_chapter","end_chapter","title","content"]),("화별 스토리","chapter_stories",["chapter_number","title","content"]),("인물","characters",["name","role","profile","personality","goal","secret"]),("세계관","world_entities",["name","category","description","rules"]),("복선","foreshadowing",["code","title","public_info","author_truth","notes"]),("시간축","timeline_events",["chapter_number","story_date","title","description","location"]),("핵심 사건","major_events",["title","description","consequence"]),("화 종료 상태","chapter_states",["chapter_number","state","status"]),("아이디어","ideas",["content"]),("설정","section_contents",["section","content"])]
         for token in tokens:
             like=f"%{token}%"

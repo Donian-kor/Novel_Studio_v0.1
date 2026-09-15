@@ -1,6 +1,6 @@
 try:
     import tiktoken
-except ImportError:  # optional dependency; character-based fallback keeps core usable
+except ImportError:  # 선택적 의존성이다. 문자 수 기반 폴백으로 핵심 기능을 유지한다.
     tiktoken = None
 from novel_studio.intelligence.retrieval import RetrievalEngine
 

@@ -121,18 +121,31 @@ class Ui_StartupDialog(object):
 
         self.newForm.setWidget(5, QFormLayout.ItemRole.FieldRole, self.tolSpin)
 
-        self.sectionLabel = QLabel(self.newBox)
-        self.sectionLabel.setObjectName(u"sectionLabel")
+        self.longStoryLabel = QLabel(self.newBox)
+        self.longStoryLabel.setObjectName(u"longStoryLabel")
 
-        self.newForm.setWidget(6, QFormLayout.ItemRole.LabelRole, self.sectionLabel)
+        self.newForm.setWidget(6, QFormLayout.ItemRole.LabelRole, self.longStoryLabel)
 
-        self.sectionSpin = QSpinBox(self.newBox)
-        self.sectionSpin.setObjectName(u"sectionSpin")
-        self.sectionSpin.setValue(5)
-        self.sectionSpin.setMinimum(1)
-        self.sectionSpin.setMaximum(50)
+        self.longStorySpin = QSpinBox(self.newBox)
+        self.longStorySpin.setObjectName(u"longStorySpin")
+        self.longStorySpin.setValue(50)
+        self.longStorySpin.setMinimum(1)
+        self.longStorySpin.setMaximum(500)
 
-        self.newForm.setWidget(6, QFormLayout.ItemRole.FieldRole, self.sectionSpin)
+        self.newForm.setWidget(6, QFormLayout.ItemRole.FieldRole, self.longStorySpin)
+
+        self.subStoryLabel = QLabel(self.newBox)
+        self.subStoryLabel.setObjectName(u"subStoryLabel")
+
+        self.newForm.setWidget(7, QFormLayout.ItemRole.LabelRole, self.subStoryLabel)
+
+        self.subStorySpin = QSpinBox(self.newBox)
+        self.subStorySpin.setObjectName(u"subStorySpin")
+        self.subStorySpin.setValue(10)
+        self.subStorySpin.setMinimum(1)
+        self.subStorySpin.setMaximum(100)
+
+        self.newForm.setWidget(7, QFormLayout.ItemRole.FieldRole, self.subStorySpin)
 
 
         self.root.addWidget(self.newBox)
@@ -203,9 +216,10 @@ class Ui_StartupDialog(object):
         self.totalLabel.setText(QCoreApplication.translate("StartupDialog", u"\ucd1d \ud654\uc218", None))
         self.charsLabel.setText(QCoreApplication.translate("StartupDialog", u"\ud654\ub2f9 \ubaa9\ud45c \uae00\uc790\uc218", None))
         self.tolLabel.setText(QCoreApplication.translate("StartupDialog", u"\ud5c8\uc6a9 \uc624\ucc28", None))
-        self.sectionLabel.setText(QCoreApplication.translate("StartupDialog", u"\uc2a4\ud1a0\ub9ac \uad6c\uac04 \ud06c\uae30", None))
+        self.longStoryLabel.setText(QCoreApplication.translate("StartupDialog", u"\uc7a5\uae30 \uc2a4\ud1a0\ub9ac \uad6c\uac04", None))
+        self.subStoryLabel.setText(QCoreApplication.translate("StartupDialog", u"\uc138\ubd80 \uc2a4\ud1a0\ub9ac \uad6c\uac04", None))
         self.tolHelp.setText(QCoreApplication.translate("StartupDialog", u"\ud5c8\uc6a9 \uc624\ucc28: AI \uc9d1\ud544 \uc2dc \ubaa9\ud45c \uae00\uc790\uc218 \u00b1 \ubc94\uc704. \uc608) \ubaa9\ud45c 5000\uc790\u00b7\uc624\ucc28 300 \u2192 4700~5300\uc790 \ud5c8\uc6a9", None))
-        self.sectionHelp.setText(QCoreApplication.translate("StartupDialog", u"\uc2a4\ud1a0\ub9ac \uad6c\uac04 \ud06c\uae30: \ud55c \uad6c\uac04\uc5d0 \ubb36\uc744 \ud654 \uc218. \uc608) 5 \u2192 1~5\ud654, 6~10\ud654 \uad6c\uac04\uc73c\ub85c \ub098\ub268", None))
+        self.sectionHelp.setText(QCoreApplication.translate("StartupDialog", u"\uc7a5\uae30 50\ud654 / \uc138\ubd80 10\ud654\ub97c \uae30\ubcf8\uc73c\ub85c \uc7a5\ud3b8 \uc2a4\ud1a0\ub9ac\ub97c \uacc4\uce35\ud654\ud569\ub2c8\ub2e4. \ud504\ub85c\uc81d\ud2b8 \uc124\uc815\uc5d0\uc11c \ubcc0\uacbd\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.", None))
         self.createBtn.setText(QCoreApplication.translate("StartupDialog", u"\uc0c8 \ud504\ub85c\uc81d\ud2b8 \ub9cc\ub4e4\uae30", None))
         self.openBtn.setText(QCoreApplication.translate("StartupDialog", u"\uae30\uc874 \ud504\ub85c\uc81d\ud2b8 \ubd88\ub7ec\uc624\uae30", None))
         self.settingsBtn.setText(QCoreApplication.translate("StartupDialog", u"AI / \ud3b8\uc9d1\uae30 \uc124\uc815", None))

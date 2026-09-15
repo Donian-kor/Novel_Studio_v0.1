@@ -32,7 +32,7 @@ class ServiceFactory:
     """프로젝트 단위의 모든 서비스와 Controller를 한 번에 만든다."""
 
     @staticmethod
-    def create_all(project_root: str | Path) -> dict:
+    def create_all(project_root: str | Path) -> dict[str, object]:
         root = Path(project_root)
         pm = ProjectManager()
         pm.open(root)

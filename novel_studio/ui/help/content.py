@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Novel Studio v1.5.1 내장 도움말."""
+"""Novel Studio v1.5.3 내장 도움말."""
 
 STYLE = """
 body { font-family: 'Malgun Gothic'; font-size: 10pt; color: #E8E6E3; }
@@ -204,7 +204,7 @@ SECTIONS = [
 ]
 
 _HEADER = """
-<h1 id="top">Novel Studio v1.5.1 사용법</h1>
+<h1 id="top">Novel Studio v1.5.3 사용법</h1>
 <p>장편 웹소설 집필을 위한 AI 보조 프로그램입니다.</p>
 <pre>기획 → 설정 DB → 스토리 → 원고 → 화 종료 상태 → 다음 화 집필 / 연속성 검사</pre>
 <p>작품의 실제 원고가 가장 중요한 정본이며, 화 종료 상태는 다음 화에 필요한 최소 연결 정보로 사용됩니다.</p>

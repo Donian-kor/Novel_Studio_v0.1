@@ -1,14 +1,13 @@
-"""Novel Studio 1.5 modular project database facade.
+"""Novel Studio 1.5 모듈형 프로젝트 DB 접근 계층이다.
 
-Four small SQLite databases are used by responsibility:
-- story.db: planning, master plan, story hierarchy and chapter story plans
-- setting.db: characters, world, factions, items, foreshadowing and timelines
-- manuscript.db: chapter metadata and chat history
-- summary.db: chapter end states and continuity results
+역할별로 분리된 4개의 SQLite DB를 사용한다.
+- story.db: 기획, 전체 기획, 스토리 계층, 화별 스토리
+- setting.db: 인물, 세계관, 세력, 아이템, 복선, 연표
+- manuscript.db: 화 메타데이터와 채팅 기록
+- summary.db: 화 종료 상태와 연속성 검사 결과
 
-The public API intentionally mirrors the old Database class so the rest of the
-application can migrate incrementally. Existing ``novel.db`` projects are copied
-into the new stores on first open; the legacy file remains untouched as a backup.
+공개 API는 점진적인 마이그레이션을 위해 이전 Database 계층과 비슷한 형태를 유지한다.
+기존 novel.db 프로젝트는 최초 실행 시 새 저장소로 복사하며 원본 파일은 백업으로 그대로 둔다.
 """
 from __future__ import annotations
 
@@ -170,7 +169,7 @@ class ProjectDatabase:
             return
         src=sqlite3.connect(legacy); src.row_factory=sqlite3.Row
         try:
-            # Simple tables whose schemas match the v1.5.1 target.
+            # v1.5.1 목표 구조에 맞는 단순 테이블을 정의한다.
             groups={
                 "story":["meta","schema_meta","plans","contract","section_contents","master_diffs","plot_batches","ideas"],
                 "setting":["characters","character_states","relationships","world_entities","timeline_events","foreshadowing","major_events","foreshadow_events"],
@@ -190,18 +189,21 @@ class ProjectDatabase:
                         target.conn.commit()
                     except sqlite3.Error:
                         continue
-            # story_sections: old v1.5.0 had an obsolete snapshot column.
-            rows=src.execute('SELECT id,start_chapter,end_chapter,status,content,updated_at FROM story_sections').fetchall()
+            # 구형 story_sections가 존재할 때만 이관한다.
+            legacy_tables={r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             target=self._dbs['story']
-            for r in rows:
-                target.execute('INSERT OR REPLACE INTO story_sections(id,start_chapter,end_chapter,status,content,updated_at) VALUES(?,?,?,?,?,?)', tuple(r))
-            # Old chapter_plans become the new canonical chapter_stories records.
-            rows=src.execute('SELECT chapter_number,title,content,status FROM chapter_plans').fetchall()
-            for r in rows:
-                n=int(r['chapter_number'])
-                sec=target.conn.execute('SELECT start_chapter,end_chapter FROM story_sections WHERE start_chapter<=? AND end_chapter>=? LIMIT 1',(n,n)).fetchone()
-                ls,le=(int(sec['start_chapter']),int(sec['end_chapter'])) if sec else (0,0)
-                target.save_chapter_story(n,ls,le,0,0,r['title'] or f'{n}화',r['content'] or '',r['status'] or '초안')
+            if "story_sections" in legacy_tables:
+                rows=src.execute('SELECT id,start_chapter,end_chapter,status,content,updated_at FROM story_sections').fetchall()
+                for r in rows:
+                    target.execute('INSERT OR REPLACE INTO story_sections(id,start_chapter,end_chapter,status,content,updated_at) VALUES(?,?,?,?,?,?)', tuple(r))
+            # 구형 chapter_plans가 존재할 때만 화별 스토리로 변환한다.
+            if "chapter_plans" in legacy_tables:
+                rows=src.execute('SELECT chapter_number,title,content,status FROM chapter_plans').fetchall()
+                for r in rows:
+                    n=int(r['chapter_number'])
+                    sec=target.conn.execute('SELECT start_chapter,end_chapter FROM story_sections WHERE start_chapter<=? AND end_chapter>=? LIMIT 1',(n,n)).fetchone()
+                    ls,le=(int(sec['start_chapter']),int(sec['end_chapter'])) if sec else (0,0)
+                    target.save_chapter_story(n,ls,le,0,0,r['title'] or f'{n}화',r['content'] or '',r['status'] or '초안')
             self._dbs['story'].set_meta('legacy_migration_v1_5_done','done')
         finally:
             src.close()
@@ -210,10 +212,10 @@ class ProjectDatabase:
         """v1.5.0의 구형 chapter_plans/snapshot 구조를 v1.5.1로 정리."""
         marker=self._dbs["story"].get_meta("story_model_v151", "")
         if marker == "done":
-            # 기존 DB에 남은 obsolete 테이블/열이 있어도 아래 정리만 재시도한다.
+            # 기존 DB에 남은 불필요한 테이블/열이 있어도 아래 정리만 다시 시도한다.
             pass
         legacy=self.root/"novel.db"
-        # 이미 분리된 v1.5.0 DB에서 chapter_plans를 변환할 수 있는 경우만 수행.
+        # 이미 분리된 v1.5.0 DB에서 chapter_plans를 변환할 수 있는 경우에만 수행한다.
         old=self._dbs["story"]
         try:
             if old._base._table_exists("chapter_plans"):
