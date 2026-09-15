@@ -1165,19 +1165,82 @@ class MainWindow(QMainWindow):
             )
             self._active_manuscript_job = None
 
+    # AI가 원고 대신 안내/거부 메시지를 반환할 때 쓰는 전형적 표현.
+    # 이런 응답을 원고 파일에 저장하면 다음 집필·윤문·연속성 검사가 전부 오염된다.
+    _AI_REFUSAL_MARKERS = (
+        '원고를 제공하지', '원고를 공유해', '원고를 보내주시', '원고를 입력해',
+        '원고가 비어', '원고가 없어', '본문을 제공해', '텍스트를 제공해',
+        '내용을 제공해', '죄송합니다만', '죄송하지만', '제공해 주시면',
+        '공유해 주시면', '알려주시면', '확인할 수 없습니다', '조정할 수 없습니다',
+        '작성할 수 없습니다', '도와드릴 수 없',
+    )
+
+    @classmethod
+    def _looks_like_ai_refusal(cls, text: str) -> bool:
+        """AI 응답이 본문이 아니라 안내/거부 메시지인지 판정한다.
+
+        거부 메시지는 대체로 짧고 안내 문구를 포함하므로, 패턴 일치 + 길이
+        상한을 함께 본다. 길이 상한은 정상 원고 안에 우연히 비슷한 대사가
+        들어가는 오탐을 줄이기 위한 것이다.
+        """
+        t = (text or '').strip()
+        if not t:
+            return False  # 빈 응답은 별도 분기로 처리한다
+        if len(t) > 800:
+            return False
+        return any(m in t for m in cls._AI_REFUSAL_MARKERS)
+
     def _handle_written_result(self, text, chapter=None, snapshot_id=None):
-        """집필 결과를 시작 시 고정한 화에 저장한 뒤 필요하면 분량 보정을 수행한다."""
+        """집필 결과를 시작 시 고정한 화에 저장한 뒤 필요하면 분량 보정을 수행한다.
+
+        AI 응답이 빈 문자열이거나 "원고를 제공하라"는 안내/거부 메시지면
+        절대 파일에 저장하지 않는다. 저장되면 다음 집필·윤문·기억 갱신이
+        오염되어 같은 거부 응답이 반복되는 악순환이 생긴다.
+        """
         chapter = int(chapter or self.current)
         target = int(self.pm.settings['chapter_chars'])
         tol = int(self.pm.settings.get('tolerance', 50))
-        n = count_chars(text)
+        final_text = str(text or '')
+
+        if not final_text.strip():
+            logger.warning('%s화: AI 집필 결과가 비어 있어 저장하지 않습니다.', chapter)
+            if snapshot_id:
+                self.ai_snapshots.finish(
+                    snapshot_id, 'failed', '',
+                    error='AI 응답이 비어 있습니다.', target={'chapter': chapter}
+                )
+            self._active_manuscript_job = None
+            self.statusBar().showMessage(
+                f'{chapter}화: AI가 빈 응답을 반환했습니다. 저장하지 않았습니다. 다시 집필해 주세요.'
+            )
+            return
+
+        if self._looks_like_ai_refusal(final_text):
+            logger.warning(
+                '%s화: AI가 본문 대신 안내/거부 메시지를 반환해 저장하지 않습니다: %s',
+                chapter, final_text[:120]
+            )
+            if snapshot_id:
+                self.ai_snapshots.finish(
+                    snapshot_id, 'failed', final_text,
+                    error='AI가 원고 대신 안내 메시지를 반환했습니다.',
+                    target={'chapter': chapter}
+                )
+            self._active_manuscript_job = None
+            self.statusBar().showMessage(
+                f'{chapter}화: AI가 원고 대신 안내 메시지를 반환했습니다. 저장하지 않았습니다. '
+                '기획/화별 플롯/직전 화 저장 상태를 확인 후 다시 집필해 주세요.'
+            )
+            return
+
+        n = count_chars(final_text)
 
         if not target - tol <= n <= target + tol and self._adjust_attempts < 3:
             self._adjust_attempts += 1
             attempt = self._adjust_attempts
             self._run(
                 f'목표 글자 수 보정 중... ({attempt}/3)',
-                lambda: self.writer.adjust(text, target, tol),
+                lambda: self.writer.adjust(final_text, target, tol),
                 lambda adjusted: self._handle_written_result(
                     adjusted, chapter, snapshot_id
                 ),
@@ -1187,7 +1250,6 @@ class MainWindow(QMainWindow):
         if not target - tol <= n <= target + tol:
             logger.warning('%s화: 3회 보정 후에도 목표 범위를 벗어남 (%s자)', chapter, n)
 
-        final_text = str(text or '')
         # AI 생성 완료 결과는 화면의 저장 버튼을 기다리지 않고 즉시 파일/DB에 기록한다.
         self.pm.save_chapter(chapter, final_text)
         self.db.set_chapter_meta(
@@ -1229,7 +1291,8 @@ class MainWindow(QMainWindow):
 
 
     def revise_current(self):
-        text = self.views[4].editor.toPlainText()
+        original = self.views[4].editor.toPlainText()
+        text = original
         stream_started = False
 
         def stream_callback(token):
@@ -1240,9 +1303,22 @@ class MainWindow(QMainWindow):
             self.views[4].editor.insertPlainText(token)
 
         def done_callback(result):
-            self.views[4].editor.setPlainText(result)
+            result_text = str(result or '')
+            # AI가 윤문 대신 안내/거부 메시지를 반환하면 편집창에 두면 안 된다.
+            # 그대로 두면 5분 자동 저장이 그 메시지를 원고 파일에 기록해버린다.
+            if not result_text.strip() or self._looks_like_ai_refusal(result_text):
+                self.views[4].editor.setPlainText(original)
+                self.update_count()
+                self.statusBar().showMessage(
+                    '윤문 중단: AI가 본문 대신 안내 메시지를 반환했습니다. 원본을 복원했습니다.'
+                )
+                return
+            self.views[4].editor.setPlainText(result_text)
             self.update_count()
 
+        if not text.strip():
+            self.statusBar().showMessage('윤문할 원고가 없습니다. 먼저 본문을 작성해 주세요.')
+            return
         self.controller.revise_text(text, stream_callback, done_callback)
     def _refresh_long_memory(self):
         """장기 기억 새로고침(현재 화 기준)을 백그라운드에서 실행한다.

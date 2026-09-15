@@ -104,6 +104,15 @@ class NovelController(QObject):
         self._busy = False
         self._current_job = None
         self._active_stream_callback = None
+        # If there are queued jobs, start the next one
+        if self._job_queue:
+            queued = self._job_queue.pop(0)
+            if queued[5]:  # is_stream True
+                label, fn, done_cb, error_cb, cancelled_cb, _, progress_cb = queued
+                self._run_stream(label, fn, done_cb, progress_cb, error_cb, cancelled_cb)
+            else:
+                label, fn, done_cb, error_cb, cancelled_cb, _ = queued
+                self._run_job(label, fn, done_cb, error_cb, cancelled_cb)
 
     def _run_job(
         self,
@@ -115,8 +124,12 @@ class NovelController(QObject):
     ) -> bool:
         """일반 작업을 단일 실행 경로로 처리한다."""
         if self._busy:
-            self.error_occurred.emit("이미 작업이 실행 중입니다.")
-            return False
+            # Queue the job to run after current job finishes
+            self._job_queue.append((
+                label, fn, done_callback, error_callback, cancelled_callback,
+                False  # is_stream = False
+            ))
+            return True  # Indicate job is queued (will be run later)
 
         job = Job(fn)
         job.signals.finished.connect(lambda result: self._on_job_done(done_callback, result))
@@ -136,13 +149,16 @@ class NovelController(QObject):
     ) -> bool:
         """스트리밍 작업을 Controller가 일관되게 관리한다."""
         if self._busy:
-            self.error_occurred.emit("이미 작업이 실행 중입니다.")
-            return False
+            # Queue the job to run after current job finishes
+            self._job_queue.append((
+                label, fn, done_callback, error_callback, cancelled_callback,
+                True,  # is_stream = True
+                progress_callback  # store progress_callback
+            ))
+            return True  # Indicate job is queued
 
         job = StreamJob(fn)
         self._active_stream_callback = progress_callback
-        # Controller(QObject)의 bound slot에 직접 연결해 토큰을 UI 스레드로 전달한다.
-        # lambda로 UI callback을 직접 호출하면 worker thread에서 위젯을 건드릴 수 있다.
         job.signals.progress.connect(self._on_stream_token)
         job.signals.finished.connect(lambda result: self._on_stream_done(done_callback, result))
         job.signals.error.connect(lambda error: self._on_stream_error(error_callback, error))
