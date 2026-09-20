@@ -26,6 +26,10 @@ DEFAULT_PROJECT_SETTINGS: dict[str, Any] = {
     "target_chapters": 500,
     "chapter_chars": 5000,
     "tolerance": 300,
+    "detail_section_count": 10,
+    "detail_story_chars": 500,
+    "chapter_story_chars": 500,
+    # 구형 프로젝트 호환용 설정. 새 UI에서는 사용하지 않는다.
     "section_size": 10,
     "long_story_size": 50,
     "sub_story_size": 10,
@@ -54,6 +58,9 @@ class ProjectManager:
         section_size: int = 10,
         long_story_size: int = 50,
         sub_story_size: int = 10,
+        detail_section_count: int | None = None,
+        detail_story_chars: int = 500,
+        chapter_story_chars: int = 500,
     ) -> None:
         """새 프로젝트를 생성한다."""
         project_root = Path(root)
@@ -66,6 +73,10 @@ class ProjectManager:
             "target_chapters": int(total_chapters),
             "chapter_chars": int(chapter_chars),
             "tolerance": int(tolerance),
+            "detail_section_count": int(detail_section_count if detail_section_count is not None else long_story_size),
+            "detail_story_chars": int(detail_story_chars),
+            "chapter_story_chars": int(chapter_story_chars),
+            # 레거시 설정 유지(기존 프로젝트/테스트 호환)
             "section_size": int(section_size),
             "long_story_size": int(long_story_size),
             "sub_story_size": int(sub_story_size),
@@ -86,8 +97,14 @@ class ProjectManager:
         self.active = True
 
     def ensure_defaults(self) -> None:
-        """기존 프로젝트의 누락 설정만 기본값으로 보완한다."""
+        """기존 프로젝트의 누락 설정을 현재 기준으로 보완한다."""
         changed = False
+        if 'detail_section_count' not in self.settings:
+            # 구형 프로젝트는 장기 구간 크기를 사용했으므로, 기존 값이 있으면
+            # 일단 그 값을 새 '구간 수'의 초기값으로 보존한다.
+            legacy = self.settings.get('long_story_size')
+            self.settings['detail_section_count'] = int(legacy) if legacy else DEFAULT_PROJECT_SETTINGS['detail_section_count']
+            changed = True
         for key, value in DEFAULT_PROJECT_SETTINGS.items():
             if key not in self.settings:
                 self.settings[key] = value

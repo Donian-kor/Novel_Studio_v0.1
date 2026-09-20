@@ -6,8 +6,8 @@ import subprocess
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QFileDialog, QListWidget,
                                  QStackedWidget, QLabel, QPushButton, QFrame,
                                  QPlainTextEdit, QTextBrowser, QDialog, QComboBox)
-from PySide6.QtCore import QTimer, Qt, QByteArray
-from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor
+from PySide6.QtCore import QTimer, Qt, QByteArray, QDateTime, QThread, Signal, QObject
+from PySide6.QtGui import QFont, QTextCursor, QAction, QKeySequence, QIcon, QPixmap, QPainter, QColor, QTextCharFormat
 from novel_studio.ui.loader import load_ui
 from novel_studio.ui.views.planning import PlanningView
 from novel_studio.ui.views.entities import EntitiesView
@@ -35,11 +35,56 @@ from novel_studio.utils.story_parser import parse_chapter_stories
 
 logger = logging.getLogger(__name__)
 
+# 실행 중인 연결 확인 스레드 참조. 창이 먼저 닫혀 GC돼도
+# 실행 중인 QThread가 파괴되지 않도록 모듈 레벨에서 유지한다.
+_RUNNING_CONN_THREADS = []
+
+
+class _ConnCheckThread(QThread):
+    """AI 서버 연결 상태를 백그라운드로 확인한다 (UI 블로킹 방지).
+
+    dialogs.py의 ``_ModelListThread``와 같은 패턴이다. ``probe``는
+    ``(ok, message)`` 튜플을 반환하는 동기 함수이고, 결과는 ``done`` 시그널로
+    UI 스레드에 전달된다.
+    """
+
+    done = Signal(object, str)  # (ok: True/False/None, 메시지)
+
+    def __init__(self, probe, parent=None):
+        super().__init__(parent)
+        self._probe = probe
+
+    def run(self):
+        try:
+            ok, message = self._probe()
+        except Exception as e:  # 프로브 자체가 실패해도 미연결로 취급한다
+            ok, message = False, str(e)
+        self.done.emit(ok, str(message or ''))
+
+
+class _GuiLogBridge(QObject):
+    record_ready = Signal(object)
+
+
+class _GuiLogHandler(logging.Handler):
+    """모든 백그라운드 로그를 Qt signal로 GUI에 전달한다."""
+    def __init__(self, bridge):
+        super().__init__()
+        self.bridge = bridge
+
+    def emit(self, record):
+        try:
+            self.bridge.record_ready.emit(record)
+        except Exception:
+            pass
+
+
+
 class MainWindow(QMainWindow):
-    NAV=['기획','설정 DB','스토리','원고','화 종료 상태']
+    NAV=['기획','설정 DB','스토리','원고','연속성 기록']
     def __init__(self, project_root):
         super().__init__()
-        self.setWindowTitle('Novel Studio v1.5.3')
+        self.setWindowTitle('Novel Studio v1.5.7')
         self.resize(1700, 1000)
         self.project_root = Path(project_root)
         self.current = 1
@@ -58,6 +103,8 @@ class MainWindow(QMainWindow):
         self._save_last_project()
         self._load_all()
         self._build_project_menu()
+        # 이벤트 루프 시작 직후 연결 상태를 조용히 1회 확인한다(팝업 없음).
+        QTimer.singleShot(0, self._auto_conn_check)
     def _init_services(self) -> None:
         """프로젝트 구성요소를 ServiceFactory에서 한 번만 생성한다."""
         from novel_studio.factories import ServiceFactory
@@ -80,6 +127,8 @@ class MainWindow(QMainWindow):
 
         self.controller = bundle["controller"]
         self.controller.set_main_window(self)
+        # AI 작업 시작 전 연결 확인 게이트를 주입한다(미연결 시 작업 자체를 막는다).
+        self.controller.set_connection_gate(self._probe_connection)
         self._connect_controller_signals()
         
     def _connect_controller_signals(self) -> None:
@@ -89,6 +138,8 @@ class MainWindow(QMainWindow):
         self.controller.chapter_changed.connect(self._on_chapter_changed)
         self.controller.ai_status_changed.connect(self._update_ai_status)
         self.controller.error_occurred.connect(self._error)
+        self.controller.connection_checked.connect(self._on_connection_checked)
+        self.controller.connection_blocked.connect(self._on_connection_blocked)
     
     def _error(self, error: object) -> None:
         """Controller에서 전달된 작업 오류를 UI에 표시한다.
@@ -123,6 +174,8 @@ class MainWindow(QMainWindow):
         """주요 UI 구성요소를 생성하고 이벤트를 연결한다."""
         self._create_ui_base()
         self._create_views()
+        self._init_gui_log()
+        self._style_ide_shell()
         self._connect_common_ui()
         self._connect_planning_ui()
         self._connect_story_ui()
@@ -138,6 +191,7 @@ class MainWindow(QMainWindow):
         self.nav = self.ui.findChild(QListWidget, 'navList')
         self.stack = self.ui.findChild(QStackedWidget, 'pageStack')
         self.left = self.ui.findChild(QFrame, 'leftPanel')
+        self.centerPanel = self.ui.findChild(QFrame, 'centerPanel')
         self.right = self.ui.findChild(QFrame, 'rightPanel')
         self.left_handle = self.ui.findChild(QFrame, 'leftHandle')
         self.right_handle = self.ui.findChild(QFrame, 'rightHandle')
@@ -147,6 +201,112 @@ class MainWindow(QMainWindow):
         self.rightExpand = self.ui.findChild(QPushButton, 'rightExpand')
         self.aiStatus = self.ui.findChild(QLabel, 'aiStatus')
         self.stopBtn = self.ui.findChild(QPushButton, 'stopBtn')
+
+    def _init_gui_log(self) -> None:
+        """접이식 IDE 콘솔을 만들고 Python logging과 연결한다."""
+        self._log_bridge = _GuiLogBridge(self)
+        self._log_handler = _GuiLogHandler(self._log_bridge)
+        self._log_handler.setLevel(logging.INFO)
+        self._log_bridge.record_ready.connect(self._append_gui_log_record)
+        root = self.ui.layout()
+        from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QTextEdit
+        self.logPanel = QFrame(self.ui)
+        self.logPanel.setObjectName('logPanel')
+        panel_layout = QVBoxLayout(self.logPanel)
+        panel_layout.setContentsMargins(6, 5, 6, 6)
+        panel_layout.setSpacing(4)
+        header = QHBoxLayout()
+        self.logToggleBtn = QPushButton('▶ 로그 기록', self.logPanel)
+        self.logToggleBtn.setObjectName('logToggleBtn')
+        self.logClearBtn = QPushButton('화면 로그 지우기', self.logPanel)
+        self.logClearBtn.setObjectName('logClearBtn')
+        header.addWidget(self.logToggleBtn)
+        header.addStretch(1)
+        header.addWidget(self.logClearBtn)
+        panel_layout.addLayout(header)
+        self.guiLog = QTextEdit(self.logPanel)
+        self.guiLog.setObjectName('guiLog')
+        self.guiLog.setReadOnly(True)
+        self.guiLog.setAcceptRichText(True)
+        self.guiLog.setVisible(False)
+        panel_layout.addWidget(self.guiLog)
+        root.insertWidget(max(0, root.count()-1), self.logPanel)
+        self.logToggleBtn.clicked.connect(self._toggle_log_panel)
+        self.logClearBtn.clicked.connect(self.guiLog.clear)
+        logging.getLogger().addHandler(self._log_handler)
+        self.destroyed.connect(self._detach_gui_log_handler)
+        self._load_recent_log_lines()
+
+    def _detach_gui_log_handler(self, *args):
+        try:
+            logging.getLogger().removeHandler(self._log_handler)
+        except Exception:
+            pass
+
+    def _toggle_log_panel(self):
+        expanded = self.guiLog.isVisible()
+        self.guiLog.setVisible(not expanded)
+        self.logToggleBtn.setText('▼ 로그 기록' if not expanded else '▶ 로그 기록')
+        self.logPanel.setProperty('expanded', not expanded)
+        self.logPanel.style().unpolish(self.logPanel); self.logPanel.style().polish(self.logPanel)
+
+    @staticmethod
+    def _log_category(record):
+        msg = record.getMessage()
+        if record.levelno >= logging.ERROR:
+            return '오류'
+        if record.levelno >= logging.WARNING:
+            return '경고'
+        pairs = [('저장',['저장','save']), ('집필',['집필','write']), ('윤문',['윤문','다듬','revise']),
+                 ('스토리',['스토리','section','chapter']), ('기획',['기획','idea','master','plot','contract']),
+                 ('설정',['설정','entity','character','faction','location','복선']), ('연결',['연결','connection','provider']),
+                 ('검사',['검사','검증','audit','check']), ('AI',['AI','LM Studio','stream','token'])]
+        for cat, keys in pairs:
+            if any(k.lower() in msg.lower() or k.lower() in record.name.lower() for k in keys):
+                return cat
+        return '시스템'
+
+    @staticmethod
+    def _log_color(category, levelno):
+        return {'저장':'#6FD08C','집필':'#57C7B1','윤문':'#78B7FF','스토리':'#D8A15B',
+                '기획':'#B78CFF','설정':'#9DA8B8','연결':'#6CC6D6','검사':'#E0C65A',
+                'AI':'#A4ACB8','경고':'#E0C65A','오류':'#FF6D7D','시스템':'#86909D'}.get(category,'#86909D')
+
+    def _append_gui_log_record(self, record):
+        try:
+            from html import escape
+            ts = QDateTime.currentDateTime().toString('HH:mm:ss')
+            cat = self._log_category(record)
+            color = self._log_color(cat, record.levelno)
+            msg = escape(record.getMessage())
+            html = f'<span style="color:#7D8794">{ts}</span> <b style="color:{color}">[{cat}]</b> <span style="color:#DDE2E8">{msg}</span>'
+            self.guiLog.append(html)
+            self.guiLog.verticalScrollBar().setValue(self.guiLog.verticalScrollBar().maximum())
+        except Exception:
+            pass
+
+    def _load_recent_log_lines(self):
+        try:
+            log_path = self.project_root / 'logs' / 'app.log'
+            if not log_path.exists():
+                return
+            for line in log_path.read_text(encoding='utf-8', errors='ignore').splitlines()[-200:]:
+                class _R:
+                    def __init__(self, msg): self.msg=msg; self.levelno=logging.INFO; self.name='file'
+                    def getMessage(self): return self.msg
+                self._append_gui_log_record(_R(line))
+        except Exception:
+            pass
+
+    def _style_ide_shell(self):
+        """전체 화면을 IDE형 3패널 + 작업 캔버스처럼 보이게 한다."""
+        self.left.setProperty('panel','nav')
+        self.centerPanel.setProperty('panel','workspace')
+        self.right.setProperty('panel','inspector')
+        for panel in (self.left, self.centerPanel, self.right):
+            panel.style().unpolish(panel); panel.style().polish(panel)
+        self.nav.setMinimumWidth(205)
+        self.nav.setMaximumWidth(280)
 
     def _create_views(self) -> None:
         """화면별 View를 생성하고 Stack에 등록한다."""
@@ -237,7 +397,7 @@ class MainWindow(QMainWindow):
         self._wire_manuscript_buttons(view)
 
     def _connect_end_state_ui(self) -> None:
-        """화 종료 상태 View의 생성 및 검증 버튼을 연결한다."""
+        """연속성 기록 View의 생성 및 검증 버튼을 연결한다."""
         view = self.end_state_view
         view.generateBtn.clicked.connect(self.generate_end_state_selected)
         view.auditBtn.clicked.connect(self.audit_long_form)
@@ -303,6 +463,8 @@ class MainWindow(QMainWindow):
         hl.addStretch(1)
         # top(첫째)과 body(둘째) 사이에 항상 보이는 상단 대시보드를 삽입한다.
         root.insertWidget(1, bar)
+        # 대시보드 위젯이 생성된 뒤에만 초기 갱신을 수행한다.
+        self.refresh_dashboard()
 
     def refresh_dashboard(self):
         try:
@@ -356,7 +518,7 @@ class MainWindow(QMainWindow):
     def show_about(self):
         QMessageBox.about(
             self, 'Novel Studio 정보',
-            '<b>Novel Studio</b> v1.5.2<br><br>'
+            '<b>Novel Studio</b> v1.5.5<br><br>'
             '아이디어부터 장편 연재 원고까지 AI와 함께 완성하는 작품 집필 도구입니다.<br><br>'
             '사용법은 메뉴바 [도움말] → [사용법] (F1)에서 확인할 수 있습니다.')
 
@@ -477,15 +639,15 @@ class MainWindow(QMainWindow):
                 '아직 작품 기획이 없습니다.\n\n'
                 '[기획] 탭에서 아래 순서를 먼저 진행하세요.\n'
                 '1) AI 아이디어 생성 → 이 아이디어 사용\n'
-                '2) AI 마스터 기획 생성\n'
-                '3) AI 핵심 기준 추출\n'
-                '4) AI 전체 플롯 생성')
+                '2) AI 소설 설계 생성\n'
+                '3) AI 작품 규칙 추출\n'
+                '4) AI 전체 줄거리 생성')
             return False
         if not self.db.get_meta('master_plot', ''):
             QMessageBox.information(
-                self, '전체 플롯 필요',
-                '마스터 기획은 있지만 전체 플롯이 없습니다.\n\n'
-                '[기획] 탭에서 [AI 전체 플롯 생성]을 먼저 실행하세요.')
+                self, '전체 줄거리 필요',
+                '소설 설계는 있지만 전체 줄거리가 없습니다.\n\n'
+                '[기획] 탭에서 [AI 전체 줄거리 생성]을 먼저 실행하세요.')
             return False
         return True
 
@@ -546,7 +708,7 @@ class MainWindow(QMainWindow):
         """⏹ 정지 버튼: 현재 작업에 취소를 요청하고 진행 중인 AI I/O를 중단한다."""
         if self.controller.stop_current_job():
             logger.info('사용자가 작업 중지를 요청했습니다.')
-            self.statusBar().showMessage('작업 취소 요청됨...')
+            logger.info('[AI] 작업 취소 요청'); self.statusBar().showMessage('작업 취소 요청됨...')
         else:
             self.statusBar().showMessage('실행 중인 작업이 없습니다.')
 
@@ -571,6 +733,7 @@ class MainWindow(QMainWindow):
             logger.warning('원고 내보내기 실패: %s', e)
             QMessageBox.critical(self, '내보내기 실패', f'원고 내보내기 중 오류가 발생했습니다.\n{e}')
     def generate_idea(self):
+        logger.info('[기획] AI 아이디어 생성 시작')
         def stream(on_token):
             previous = '\n'.join(r['content'] for r in self.db.recent_ideas(10))
             collected = []
@@ -593,15 +756,16 @@ class MainWindow(QMainWindow):
             return
         self.db.use_idea(t)
         self.db.set_meta('idea', t)
-        self.statusBar().showMessage('아이디어 확정 → 아래에서 [AI 마스터 기획 생성]을 눌러 계속하세요.')
+        self.statusBar().showMessage('아이디어 확정 → 아래에서 [AI 소설 설계 생성]을 눌러 계속하세요.')
         self.planning_view.refresh()
     def generate_master(self):
+        logger.info('[기획] AI 소설 설계 생성 시작')
         t=self.planning_view.ideaEdit.toPlainText().strip() or self.db.get_meta('idea','')
         if not t: QMessageBox.warning(self,'아이디어 필요','아이디어를 먼저 입력하거나 AI로 생성하세요.'); return
         def stream(on_token):
             collected = []
             for piece in self.ai.generate_stream(
-                    [{'role': 'system', 'content': '장편 웹소설 마스터 기획자'},
+                    [{'role': 'system', 'content': '장편 웹소설 소설 설계자'},
                      {'role': 'user', 'content': master_prompt(t, self.pm.settings)}],
                     temperature=.72, max_tokens=12000):
                 if self.controller.cancel_requested:
@@ -613,11 +777,11 @@ class MainWindow(QMainWindow):
                 self.db.save_plan(out)
                 self.db.set_meta('idea', t)
             return out
-        self._run_stream('AI 마스터 기획 생성 중...', stream,
+        self._run_stream('AI 소설 설계 생성 중...', stream,
                          lambda _: self._after_master_saved(),
                          append=self.planning_view.masterEdit)
     def sync_master_characters(self):
-        """마스터 기획에서 남주/여주/조연 인물을 자동 추출해 설정 DB에 upsert한다."""
+        """소설 설계에서 남주/여주/조연 인물을 자동 추출해 설정 DB에 upsert한다."""
         from novel_studio.ai.prompts import entity_catalog_prompt
         from novel_studio.utils.entity_parser import parse_entity_catalog
         master=self.db.get_plan().strip()
@@ -631,21 +795,44 @@ class MainWindow(QMainWindow):
             count+=1
         return count
 
-    def _after_master_saved(self, _=None):
+    def _on_master_characters_synced(self, count=None):
+        """인물 자동 동기화 결과를 상태바/설정 뷰에 반영한다 (AI 호출 없음)."""
         try:
-            n=self.sync_master_characters()
+            n = int(count) if count is not None else 0
+        except (TypeError, ValueError):
+            n = 0
+        try:
             self.entities_view.refresh()
-            self.statusBar().showMessage(f'마스터 기획 저장 완료 · 인물 DB {n}개 자동 동기화')
+            self.statusBar().showMessage(f'소설 설계 저장 완료 · 인물 DB {n}개 자동 동기화')
         except Exception as e:
-            logger.warning('마스터→인물 자동 동기화 실패: %s',e)
+            logger.warning('인물 동기화 결과 표시 실패: %s', e)
+            self.statusBar().showMessage('소설 설계 저장 완료 · 인물 자동 동기화 실패')
+
+    def _sync_master_characters_failed(self, error):
+        """인물 자동 동기화 실패를 상태바/설정 뷰에 반영한다 (AI 호출 없음)."""
+        try:
             self.entities_view.refresh()
-            self.statusBar().showMessage('마스터 기획 저장 완료 · 인물 자동 동기화 실패')
+        finally:
+            logger.warning('마스터→인물 자동 동기화 실패: %s', error)
+            self.statusBar().showMessage('소설 설계 저장 완료 · 인물 자동 동기화 실패')
+
+    def _after_master_saved(self, _=None):
+        """AI 소설 설계 생성 완료 후 인물 동기화를 1회만 실행한다.
+
+        ``Job``이 끝난 뒤 UI 스레드에서 호출되므로, 여기서
+        ``sync_master_characters``를 ``_run``으로 위임하면 AI 호출이
+        정확히 1회만 발생한다.
+        """
+        self._run('소설 설계에서 인물 자동 동기화 중...',
+                  self.sync_master_characters,
+                  self._on_master_characters_synced,
+                  error_callback=self._sync_master_characters_failed)
 
     def preview_master_diff(self):
         old=self.db.get_plan() or ''
         new=self.planning_view.masterEdit.toPlainText()
         if not old:
-            QMessageBox.information(self,'변경점 검사','기존 마스터 기획이 없습니다. 먼저 저장된 마스터 기획을 만들어 주세요.')
+            QMessageBox.information(self,'변경점 검사','기존 소설 설계가 없습니다. 먼저 저장된 소설 설계를 만들어 주세요.')
             return
         if old == new:
             QMessageBox.information(self,'변경점 검사','변경된 내용이 없습니다.')
@@ -660,14 +847,22 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self,'변경점 검사 실패',str(e))
 
     def save_master(self):
+        logger.info('[저장] 소설 설계 저장 시작')
         self.db.save_plan(self.planning_view.masterEdit.toPlainText())
-        self._run('마스터 기획에서 인물 자동 동기화 중...', self.sync_master_characters, self._after_master_saved)
+        answer = QMessageBox.question(
+            self, '소설 설계 저장',
+            '소설 설계를 저장했습니다.\n\n인물 자동 동기화(AI 호출)도 함께 실행할까요?',
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer == QMessageBox.Yes:
+            self._after_master_saved()
+        else:
+            self.statusBar().showMessage('소설 설계 저장 완료')
     def save_contract(self):
         current=self.db.get_contract()
         if current and current['locked']:
-            QMessageBox.warning(self,'핵심 기준 잠금','잠긴 핵심 기준은 수정할 수 없습니다.'); return
-        self.db.save_contract(self.planning_view.contractEdit.toPlainText(),False); self.statusBar().showMessage('핵심 기준 저장 완료')
-    def save_master_plot(self): self.db.set_meta('master_plot',self.planning_view.masterPlotEdit.toPlainText()); self.statusBar().showMessage('전체 플롯 저장 완료')
+            QMessageBox.warning(self,'작품 규칙 잠금','잠긴 작품 규칙은 수정할 수 없습니다.'); return
+        self.db.save_contract(self.planning_view.contractEdit.toPlainText(),False); logger.info('[저장] 작품 규칙 저장 완료'); self.statusBar().showMessage('작품 규칙 저장 완료')
+    def save_master_plot(self): self.db.set_meta('master_plot',self.planning_view.masterPlotEdit.toPlainText()); logger.info('[저장] 전체 줄거리 저장 완료'); self.statusBar().showMessage('전체 줄거리 저장 완료')
     def generate_contract(self):
         if not self.db.get_plan(): return
         txt = '\n\n'.join(f'[{s}]\n{self.db.section_content(s)}' for s in SECTIONS)
@@ -684,19 +879,19 @@ class MainWindow(QMainWindow):
             if out.strip():
                 self.db.save_contract(out, False)
             return out
-        self._run_stream('장편 핵심 기준 추출 중...', stream, lambda _: None,
+        self._run_stream('작품 규칙 추출 중...', stream, lambda _: None,
                          append=self.planning_view.contractEdit)
     def lock_contract(self):
         text=self.planning_view.contractEdit.toPlainText().strip()
         if not text:
-            QMessageBox.warning(self,'핵심 기준 필요','잠글 내용이 없습니다.')
+            QMessageBox.warning(self,'작품 규칙 필요','잠글 내용이 없습니다.')
             return
         self.db.save_contract(text,True)
         self.planning_view.contractEdit.setReadOnly(True)
         self.planning_view.lockBtn.setEnabled(False)
-        self.statusBar().showMessage('핵심 기준 잠금 완료')
+        self.statusBar().showMessage('작품 규칙 잠금 완료')
     def generate_master_plot(self):
-        if not self.db.get_contract(): QMessageBox.warning(self,'핵심 기준 필요','먼저 핵심 기준을 추출하세요.'); return
+        if not self.db.get_contract(): QMessageBox.warning(self,'작품 규칙 필요','먼저 작품 규칙을 추출하세요.'); return
         c = self.db.get_contract()
         def stream(on_token):
             collected = []
@@ -712,89 +907,72 @@ class MainWindow(QMainWindow):
             if out.strip():
                 self.db.set_meta('master_plot', out)
             return out
-        self._run_stream('AI 전체 플롯 생성 중...', stream,
+        self._run_stream('AI 전체 줄거리 생성 중...', stream,
                          lambda _: self.planning_view.refresh(),
                          append=self.planning_view.masterPlotEdit)
     def _mark_downstream_sections_stale(self, start: int) -> None:
-        """선택 장기 구간 재생성 뒤의 구간을 갱신 필요 상태로 표시한다."""
-        for s, e in self.plot.long_ranges():
+        """선택 구간 재생성 뒤의 구간을 갱신 필요 상태로 표시한다."""
+        for s, e in self.plot.detail_ranges():
             if s <= int(start):
                 continue
             row = self.db.section(s, e)
             if row and (row['content'] or '').strip():
                 self.db.save_section(s, e, '갱신 필요', row['content'])
 
-    def _generate_subsections(self, start: int, end: int, parent_content: str) -> int:
-        made = 0
-        previous = ''
-        for ss, ee in self.plot.sub_ranges(start, end):
-            if self.controller.cancel_requested:
-                break
-            text = self.plot.generate_substory_section(ss, ee, parent_content, previous)
-            if not (text or '').strip():
-                raise ValueError(f'{ss}~{ee}화 세부 스토리 생성 결과가 비어 있습니다.')
-            self.db.save_story_subsection(start, end, ss, ee, f'{ss}~{ee}화 세부 스토리', text, '생성완료')
-            previous = text
-            made += 1
-        return made
-
     def generate_sections(self, force: bool = False):
-        if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 전체 플롯을 생성하세요.')
+        """전체 줄거리를 기준으로 설정된 개수의 상세 스토리 구간을 생성한다."""
+        logger.info('[스토리] %s 구간별 상세 스토리 생성 시작', '전체 재생성' if force else '생성/이어하기')
+        if not self.db.get_meta('master_plot', '').strip():
+            QMessageBox.warning(self, '전체 줄거리 필요', '먼저 [기획]에서 AI 전체 줄거리를 생성하세요.')
             return
+        ranges = self.plot.detail_ranges()
         def work():
             previous = ''
             made = 0
-            for s, e in self.plot.long_ranges():
+            for s, e in ranges:
                 if self.controller.cancel_requested:
                     break
                 old = self.db.section(s, e)
                 if old and old['status'] == '생성완료' and not force:
                     previous = old['content'] or previous
                     continue
-                content = self.plot.generate_story_section(s, e, previous)
+                content = self.plot.generate_detail_section(s, e, previous)
                 if not (content or '').strip():
-                    raise ValueError(f'{s}~{e}화 스토리 생성 결과가 비어 있습니다.')
-                self.db.save_section(s, e, '생성완료', content, '')
-                made += self._generate_subsections(s, e, content)
+                    raise ValueError(f'{s}~{e}화 상세 스토리 생성 결과가 비어 있습니다.')
+                self.db.save_section(s, e, '생성완료', content)
                 previous = content
+                made += 1
             return made
-        label = '스토리 전체 다시 생성 중...' if force else '스토리 생성/이어하기 중...'
-        return self._run(label, work, lambda n: (self.story_view.refresh(), self.statusBar().showMessage(f'세부 스토리 {n}개 생성 완료')))
+        label = '전체 구간 재생성 중...' if force else '구간별 상세 스토리 생성 중...'
+        return self._run(label, work, lambda n: (self.story_view.refresh(), self.statusBar().showMessage(f'상세 스토리 {n}개 구간 생성 완료')))
 
     def regenerate_selected_section(self):
+        logger.info('[스토리] 선택 구간 재생성 시작')
         kind, row = self.story_view.selected()
-        if not row:
-            QMessageBox.information(self,'구간 선택','먼저 재생성할 스토리 구간을 선택하세요.')
+        if kind != 'detail' or not row:
+            QMessageBox.information(self, '구간 선택', '먼저 재생성할 상세 스토리 구간을 선택하세요.')
             return
-        if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 [기획]에서 전체 플롯을 생성하세요.')
+        if not self.db.get_meta('master_plot', '').strip():
+            QMessageBox.warning(self, '전체 줄거리 필요', '먼저 [기획]에서 AI 전체 줄거리를 생성하세요.')
             return
-        if QMessageBox.question(self,'선택 구간 재생성','선택한 스토리 구간을 새로 생성하여 기존 내용을 교체합니다. 계속하시겠습니까?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, '선택 구간 재생성', '선택한 구간의 상세 스토리를 새로 생성하여 기존 내용을 교체합니다. 계속하시겠습니까?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
-        if kind == 'long':
-            s,e = int(row['start_chapter']), int(row['end_chapter'])
-            def work():
-                content = self.plot.generate_story_section(s, e, '')
-                if not content.strip(): raise ValueError('스토리 생성 결과가 비어 있습니다.')
-                self.db.save_section(s,e,'생성완료',content)
-                return self._generate_subsections(s,e,content)
-        else:
-            s,e = int(row['start_chapter']), int(row['end_chapter'])
-            parent = self.db.section(int(row['parent_start']), int(row['parent_end']))
-            parent_content = (parent['content'] if parent else '') or ''
-            def work():
-                content = self.plot.generate_substory_section(s,e,parent_content)
-                if not content.strip(): raise ValueError('세부 스토리 생성 결과가 비어 있습니다.')
-                self.db.save_story_subsection(int(row['parent_start']),int(row['parent_end']),s,e,row['title'] or f'{s}~{e}화 세부 스토리',content,'생성완료')
-                return 1
-        return self._run('선택 스토리 구간 재생성 중...', work, lambda _: self.story_view.refresh())
+        s, e = int(row['start_chapter']), int(row['end_chapter'])
+        def work():
+            content = self.plot.generate_detail_section(s, e, '')
+            if not content.strip():
+                raise ValueError('상세 스토리 생성 결과가 비어 있습니다.')
+            self.db.save_section(s, e, '생성완료', content)
+            self._mark_downstream_sections_stale(s)
+            return 1
+        return self._run(f'{s}~{e}화 상세 스토리 재생성 중...', work, lambda _: self.story_view.refresh())
 
     def regenerate_all_sections(self):
-        if not self.db.get_meta('master_plot','').strip():
-            QMessageBox.warning(self,'전체 플롯 필요','먼저 전체 플롯을 생성하세요.')
+        logger.info('[스토리] 전체 상세 구간 재생성 시작')
+        if not self.db.get_meta('master_plot', '').strip():
+            QMessageBox.warning(self, '전체 줄거리 필요', '먼저 [기획]에서 AI 전체 줄거리를 생성하세요.')
             return
-        if QMessageBox.question(self,'전체 스토리 다시 생성','현재 스토리 구간을 전부 새로 생성합니다. 계속하시겠습니까?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, '전체 구간 재생성', '현재 설정된 모든 상세 스토리 구간을 새로 생성합니다. 계속하시겠습니까?', QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
         return self.generate_sections(force=True)
 
@@ -858,6 +1036,7 @@ class MainWindow(QMainWindow):
         return self.end_state.generate(int(chapter), text)
 
     def save_current(self, update_end_state=None):
+        logger.info('[저장] 현재 원고 저장 시작 (%s화)', self.current)
         """원고는 항상 즉시 저장한다. 종료 상태 AI 생성은 별도 옵션으로 실행한다."""
         v = self.manuscript_view
         t = v.editor.toPlainText()
@@ -878,6 +1057,7 @@ class MainWindow(QMainWindow):
             self.controller.generate_end_state(chapter, text, done_callback=done, error_callback=err)
 
     def save_all(self, silent=False):
+        logger.info('[저장] 전체 저장 시작')
         """현재 화면 내용을 저장한다. 자동 저장도 AI를 호출하지 않는다."""
         saved, failed = [], []
         try:
@@ -904,9 +1084,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             failed.append('원고'); logger.exception('전체 저장(원고) 실패: %s',e)
         try:
-            if self.end_state_view.save_selected(): saved.append('화 종료 상태')
+            if self.end_state_view.save_selected(): saved.append('연속성 기록')
         except Exception as e:
-            failed.append('화 종료 상태'); logger.exception('전체 저장(종료 상태) 실패: %s',e)
+            failed.append('연속성 기록'); logger.exception('전체 저장(연속성 기록) 실패: %s',e)
         if failed:
             msg='자동 저장 실패: ' if silent else '일부 저장에 실패했습니다: '; self.statusBar().showMessage(msg+', '.join(failed))
             if not silent: QMessageBox.warning(self,'전체 저장',msg+' / '.join(failed))
@@ -957,11 +1137,11 @@ class MainWindow(QMainWindow):
         targets = [
             ('기획-아이디어', getattr(self.planning_view, 'ideaEdit', None)),
             ('기획-마스터', getattr(self.planning_view, 'masterEdit', None)),
-            ('기획-핵심 기준', getattr(self.planning_view, 'contractEdit', None)),
-            ('기획-전체 플롯', getattr(self.planning_view, 'masterPlotEdit', None)),
+            ('기획-작품 규칙', getattr(self.planning_view, 'contractEdit', None)),
+            ('기획-전체 줄거리', getattr(self.planning_view, 'masterPlotEdit', None)),
             ('스토리', getattr(self.story_view, 'detail', None)),
             ('원고', getattr(self.manuscript_view, 'editor', None)),
-            ('화 종료 상태', getattr(self.end_state_view, 'edit', None)),
+            ('연속성 기록', getattr(self.end_state_view, 'edit', None)),
         ]
         changed = []
         for name, w in targets:
@@ -1012,6 +1192,12 @@ class MainWindow(QMainWindow):
                 self.controller.pool.waitForDone(3000)  # 최대 3초 대기
         except Exception:
             pass
+        # 진행 중인 연결 확인 스레드를 정리한다 (QThread 파괴 경고 방지).
+        try:
+            for thread in list(_RUNNING_CONN_THREADS):
+                thread.wait(1000)
+        except Exception:
+            pass
         # Qt 작업 스레드가 종료된 뒤 프로젝트의 모든 SQLite 연결을 닫는다.
         try:
             if getattr(self, 'db', None) is not None:
@@ -1021,6 +1207,7 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def write_current(self):
+        logger.info('[집필] %s화 AI 집필 시작', self.current)
         """현재 화에 고정된 AI 집필. 화면을 이동해도 작업 대상 화의 결과를 계속 보존한다."""
         self._adjust_attempts = 0
         if not self._check_write_prereq(): return
@@ -1112,7 +1299,7 @@ class MainWindow(QMainWindow):
             self._active_manuscript_job = None
             self.statusBar().showMessage(
                 f'{chapter}화: AI가 원고 대신 안내 메시지를 반환했습니다. 저장하지 않았습니다. '
-                '기획/직전 화 종료 상태를 확인 후 다시 집필해 주세요.'
+                '기획/직전 화 연속성 기록을 확인 후 다시 집필해 주세요.'
             )
             return
 
@@ -1156,6 +1343,7 @@ class MainWindow(QMainWindow):
         self._active_manuscript_job = None
 
     def revise_current(self):
+        logger.info('[윤문] %s화 AI 윤문 시작', self.current)
         original = self.manuscript_view.editor.toPlainText()
         text = original
         stream_started = False
@@ -1186,39 +1374,56 @@ class MainWindow(QMainWindow):
             return
         self.controller.revise_text(text, stream_callback, done_callback)
     def generate_chapter_stories(self):
-        kind,row=self.story_view.selected()
-        if kind not in ('sub','long') or not row:
-            QMessageBox.information(self,'세부 스토리 선택','먼저 장기 또는 세부 스토리 구간을 선택하세요.')
+        logger.info('[스토리] 화별 스토리 생성 시작')
+        kind, row = self.story_view.selected()
+        if kind != 'detail' or not row:
+            QMessageBox.information(self, '구간 선택', '먼저 화별로 전개할 상세 스토리 구간을 선택하세요.')
             return
-        start=int(row['start_chapter']); end=int(row['end_chapter'])
-        sub_content=(row['content'] or '')
+        start, end = int(row['start_chapter']), int(row['end_chapter'])
+        section_content = (row['content'] or '')
+        if not section_content.strip():
+            QMessageBox.information(self, '상세 스토리 필요', '선택한 구간의 상세 스토리를 먼저 생성하세요.')
+            return
         def work():
-            raw=self.plot.generate_chapter_stories(start,end,sub_content)
-            parsed=parse_chapter_stories(raw,start,end)
+            raw = self.plot.generate_chapter_stories(start, end, section_content)
+            parsed = parse_chapter_stories(raw, start, end)
             if not parsed:
                 raise ValueError('화별 스토리 응답을 화 번호 형식으로 파싱하지 못했습니다.')
-            for n,title,content in parsed:
-                sub=self.db.story_subsection_for_chapter(n); long=self.db.section_for_chapter(n)
-                self.db.save_chapter_story(n,int(long['start_chapter']) if long else 0,int(long['end_chapter']) if long else 0,int(sub['start_chapter']) if sub else 0,int(sub['end_chapter']) if sub else 0,title or f'{n}화',content,'생성완료')
+            for n, title, content in parsed:
+                detail = self.db.section_for_chapter(n)
+                self.db.save_chapter_story(
+                    n, int(detail['start_chapter']) if detail else start, int(detail['end_chapter']) if detail else end,
+                    int(detail['start_chapter']) if detail else start, int(detail['end_chapter']) if detail else end,
+                    title or f'{n}화', content, '생성완료'
+                )
             return len(parsed)
-        self._run('AI 화별 스토리 생성 중...',work,lambda n:(self.story_view.refresh(),self.statusBar().showMessage(f'화별 스토리 {n}개 생성 완료')))
+        self._run('AI 화별 스토리 생성 중...', work, lambda n: (self.story_view.refresh(), self.statusBar().showMessage(f'화별 스토리 {n}개 생성 완료')))
 
     def regenerate_selected_chapter_story(self):
-        kind,row=self.story_view.selected()
-        if kind!='chapter' or not row:
-            QMessageBox.information(self,'화 선택','먼저 재생성할 화별 스토리를 선택하세요.')
+        logger.info('[스토리] 선택 화 재생성 시작')
+        kind, row = self.story_view.selected()
+        if kind != 'chapter' or not row:
+            QMessageBox.information(self, '화 선택', '먼저 재생성할 화별 스토리를 선택하세요.')
             return
-        n=int(row['chapter_number'])
-        sub=self.db.story_subsection_for_chapter(n); long=self.db.section_for_chapter(n)
-        context=(sub['content'] if sub else '') or (long['content'] if long else '') or ''
+        n = int(row['chapter_number'])
+        detail = self.db.section_for_chapter(n)
+        context = (detail['content'] if detail else '') or ''
+        if not context.strip():
+            QMessageBox.information(self, '상세 스토리 필요', '해당 화가 속한 상세 스토리를 먼저 생성하세요.')
+            return
         def work():
-            raw=self.plot.generate_chapter_stories(n,n,context,'')
-            parsed=parse_chapter_stories(raw,n,n)
-            if not parsed: raise ValueError(f'{n}화 스토리 파싱에 실패했습니다.')
-            _,title,content=parsed[0]
-            self.db.save_chapter_story(n,int(long['start_chapter']) if long else 0,int(long['end_chapter']) if long else 0,int(sub['start_chapter']) if sub else 0,int(sub['end_chapter']) if sub else 0,title or f'{n}화',content,'생성완료')
+            raw = self.plot.generate_chapter_stories(n, n, context, '')
+            parsed = parse_chapter_stories(raw, n, n)
+            if not parsed:
+                raise ValueError(f'{n}화 스토리 파싱에 실패했습니다.')
+            _, title, content = parsed[0]
+            self.db.save_chapter_story(
+                n, int(detail['start_chapter']) if detail else 0, int(detail['end_chapter']) if detail else 0,
+                int(detail['start_chapter']) if detail else 0, int(detail['end_chapter']) if detail else 0,
+                title or f'{n}화', content, '생성완료'
+            )
             return 1
-        self._run(f'{n}화 스토리 재생성 중...',work,lambda _:self.story_view.refresh())
+        self._run(f'{n}화 스토리 재생성 중...', work, lambda _: self.story_view.refresh())
 
     def generate_end_state_selected(self):
         n = self.end_state_view.selected_chapter()
@@ -1226,11 +1431,11 @@ class MainWindow(QMainWindow):
             return
         text = self.pm.load_chapter(n)
         if not text.strip():
-            QMessageBox.information(self,'화 종료 상태','선택한 화의 원고가 없습니다.')
+            QMessageBox.information(self,'연속성 기록','선택한 화의 원고가 없습니다.')
             return
         def done(result):
-            self.end_state_view.refresh(); self._update_state(); self.statusBar().showMessage(f'{n}화 종료 상태 생성 완료')
-        self.controller.generate_end_state(n, text, done_callback=done, error_callback=lambda e:self.statusBar().showMessage(f'종료 상태 생성 실패: {e}'), cancelled_callback=lambda:self.statusBar().showMessage('화 종료 상태 생성이 취소되었습니다.'))
+            self.end_state_view.refresh(); self._update_state(); self.statusBar().showMessage(f'{n}화 연속성 기록 생성 완료')
+        self.controller.generate_end_state(n, text, done_callback=done, error_callback=lambda e:self.statusBar().showMessage(f'연속성 기록 생성 실패: {e}'), cancelled_callback=lambda:self.statusBar().showMessage('연속성 기록 생성이 취소되었습니다.'))
 
     def audit_long_form(self):
         view=self.end_state_view
@@ -1332,13 +1537,19 @@ class MainWindow(QMainWindow):
         )
     def open_ai_chat(self): self.chat_window.show(); self.chat_window.raise_(); self.chat_window.activateWindow()
     def _init_conn_test_btn(self):
-        """상단 연결 테스트 버튼(●)을 초기화한다. 초기 상태는 빨강(미연결)."""
+        """상단 연결 테스트 버튼(●)을 초기화한다.
+
+        초기 상태는 회색(확인 중)이며, 시작 직후 백그라운드 자동 확인 결과로
+        초록(연결됨)/빨강(미연결)으로 갱신된다. 클릭 시 수동 연결 테스트를 실행한다.
+        """
         btn = self.ui.findChild(QPushButton, 'testConnBtn')
         if btn is None:
             return
+        self._conn_ok = None
+        self._conn_checking = False
         btn.setText('')
-        btn.setToolTip('AI 연결 테스트: 클릭하면 현재 활성 프로바이더로 연결을 확인합니다.')
-        self._set_conn_state(False, '미연결 - 클릭하면 연결을 테스트합니다.')
+        btn.setToolTip('AI 연결 확인 중...')
+        self._set_conn_state(None, 'AI 연결 확인 중...')
         btn.clicked.connect(self.run_connection_test)
 
     def _conn_icon(self, color):
@@ -1354,7 +1565,8 @@ class MainWindow(QMainWindow):
         return QIcon(pm)
 
     def _set_conn_state(self, ok, message=''):
-        """연결 상태 아이콘 갱신. ok: True(초록/연결됨), False(빨강/미연결), None(회색/테스트 중)"""
+        """연결 상태 아이콘 갱신. ok: True(초록/연결됨), False(빨강/미연결), None(회색/확인 중)"""
+        self._conn_ok = ok
         btn = self.ui.findChild(QPushButton, 'testConnBtn')
         if btn is None:
             return
@@ -1405,9 +1617,92 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f'{name} 연결 실패')
             QMessageBox.critical(self, '연결 테스트 실패', f'{name} 연결 실패\n\n{msg}')
 
+    def _probe_connection(self):
+        """현재 활성 프로바이더의 연결 가능 여부를 확인한다.
+
+        워커 스레드에서 호출되는 동기 프로브로 ``(ok, message)`` 튜플을
+        반환한다. ``ok``는 True(연결됨)/False(미연결)/None(판정 불가)이다.
+        실제 텍스트 생성 없이 가벼운 모델 목록 조회(GET /models)만 수행한다.
+        """
+        try:
+            pid = self.app.data['active_provider']
+        except Exception:
+            pid = 'lmstudio'
+        name = self.providers.IDS.get(pid, pid)
+        cfg = self.providers.config(pid)
+        if not str(cfg.get('base_url', '') or '').strip():
+            return None, f'{name}: BASE URL이 설정되지 않았습니다.'
+        from novel_studio.ai.providers.base import AIProvider
+        try:
+            provider = self.providers.probe(pid)
+        except Exception as e:
+            return None, f'{name}: 프로바이더 생성 실패 ({e})'
+        if type(provider).list_models is AIProvider.list_models:
+            # Anthropic/Gemini 등 목록 조회 미구현 프로바이더는 자동 판정이 불가하다.
+            return None, f'{name}은(는) 자동 연결 확인을 지원하지 않습니다.'
+        try:
+            models = provider.list_models()
+        except Exception as e:
+            return False, f'{name} 서버에 연결할 수 없습니다: {e}'
+        if not models:
+            return False, f'{name} 서버는 응답하지만 로드된 모델이 없습니다. 모델을 먼저 Load 하세요.'
+        return True, f'{name} 연결됨 ({len(models)}개 모델)'
+
+    def _auto_conn_check(self):
+        """AI 서버 연결 상태를 백그라운드로 조용히 확인한다 (팝업 없이 색만 갱신)."""
+        if getattr(self, '_conn_checking', False):
+            return  # 이미 확인 중이면 중복 실행하지 않는다
+        self._conn_checking = True
+        t = _ConnCheckThread(self._probe_connection)
+        # MainWindow의 바인드 메서드에 연결 → 큐 시그널 → UI 스레드에서 실행된다.
+        t.done.connect(self._on_conn_check_done)
+        _RUNNING_CONN_THREADS.append(t)
+        t.start()
+
+    def _on_conn_check_done(self, ok, message):
+        """백그라운드 연결 확인 완료 (UI 스레드)."""
+        self._conn_checking = False
+        try:
+            _RUNNING_CONN_THREADS.remove(self.sender())
+        except Exception:
+            pass
+        self._on_connection_checked(ok, message)
+
+    def _on_connection_checked(self, ok, message=''):
+        """연결 확인 결과를 조용히 반영한다 (팝업 없이 색과 툴팁만 갱신)."""
+        stamp = QDateTime.currentDateTime().toString('HH:mm:ss')
+        if ok is True:
+            self._set_conn_state(True, f'{message} · 마지막 확인 {stamp}')
+        elif ok is False:
+            self._set_conn_state(False, f'미연결 ({message}) · 마지막 확인 {stamp}')
+        else:
+            self._set_conn_state(None, f'{message} · 버튼을 눌러 확인하세요')
+
+    def _on_connection_blocked(self, message):
+        """미연결로 AI 작업을 시작하지 못했을 때 경고를 표시한다.
+
+        작업은 시작되지 않았으므로 원고/DB에는 어떤 변경도 없다.
+        """
+        self._set_conn_state(False, f'미연결 ({message})')
+        # 시작되지 못한 집필 작업의 빈 버퍼 잔류를 정리한다(내용이 있으면 유지).
+        active = getattr(self, '_active_manuscript_job', None)
+        if active is not None and not active.get('buffer'):
+            self._active_manuscript_job = None
+        try:
+            pid = self.app.data['active_provider']
+        except Exception:
+            pid = ''
+        name = self.providers.IDS.get(pid, pid or 'AI')
+        QMessageBox.warning(
+            self, 'AI 연결 실패',
+            f'{name}에 연결할 수 없어 작업을 시작하지 않았습니다.\n\n{message}\n\n'
+            'AI 서버(LM Studio 등)가 실행 중인지, 모델이 Load 되어 있는지 확인하세요.\n'
+            '[설정] → [연결 테스트]로도 확인할 수 있습니다.',
+        )
+
     def open_settings(self):
         d=AISettingsDialog(self.providers,self.app,self)
-        if d.exec()==QDialog.DialogCode.Accepted:self._update_ai_status(); self.apply_editor_style()
+        if d.exec()==QDialog.DialogCode.Accepted:self._update_ai_status(); self.apply_editor_style(); self._auto_conn_check()
     def apply_editor_style(self):
         s=self.app.data['editor']; v=self.manuscript_view.editor; v.setFont(QFont(str(s['font_family']),int(s['font_size']))); v.setStyleSheet(f"QPlainTextEdit{{color:{s['text_color']};background-color:{s['bg_color']};}}")
     def _update_ai_status(self):
@@ -1423,7 +1718,7 @@ class MainWindow(QMainWindow):
             logger.warning('AI 상태 갱신 실패: %s', e)
             self.aiStatus.setText('AI ● 확인 필요')
     def _update_state(self):
-        """현재 집필 화 직전의 화 종료 상태만 오른쪽 사이드바에 표시한다."""
+        """현재 집필 화 직전의 연속성 기록만 오른쪽 사이드바에 표시한다."""
         view=self.ui.findChild(QTextBrowser,'stateText')
         if view is None: return
         chapter=int(self.current); previous=chapter-1
@@ -1431,7 +1726,7 @@ class MainWindow(QMainWindow):
         title=str(self.pm.settings.get('title','') or '작품').strip()
         content=(row['state'] if row else '') or ''
         from html import escape
-        head=f'<div class="state-head"><div class="state-title">직전 화 종료 상태</div><div class="state-meta">현재 작성 화 <b>{chapter}화</b> · 기준 <b>{previous}화</b></div><div class="state-work">{escape(title)}</div></div>'
+        head=f'<div class="state-head"><div class="state-title">직전 화 연속성 기록</div><div class="state-meta">현재 작성 화 <b>{chapter}화</b> · 기준 <b>{previous}화</b></div><div class="state-work">{escape(title)}</div></div>'
         body='' 
         if not row:
             body='<div class="state-empty">직전 화의 종료 상태가 아직 없습니다.</div>'

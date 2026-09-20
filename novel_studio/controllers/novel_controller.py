@@ -1,12 +1,23 @@
 """Novel Studio 애플리케이션 컨트롤러."""
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, NamedTuple
 
 from PySide6.QtCore import QObject, QThreadPool, Signal, Slot
 
 from novel_studio.jobs.worker import Job, StreamJob
 from novel_studio.utils.cancellation import CancelToken
+
+
+class JobQueueItem(NamedTuple):
+    """작업 큐 항목. 스트리밍/일반 작업을 통일된 구조로 관리한다."""
+    label: str
+    fn: Callable[..., Any]
+    done_callback: Optional[Callable[[Any], None]]
+    error_callback: Optional[Callable[[str], None]]
+    cancelled_callback: Optional[Callable[[], None]]
+    is_stream: bool
+    progress_callback: Optional[Callable[[str], None]] = None
 
 
 class NovelController(QObject):
@@ -17,6 +28,9 @@ class NovelController(QObject):
     chapter_changed = Signal(int)
     ai_status_changed = Signal(str)
     error_occurred = Signal(str)
+    # 연결 사전 확인(게이트) 결과. UI의 상태 표시와 경고 팝업에 사용된다.
+    connection_checked = Signal(object, str)  # (ok: True/False/None, 메시지)
+    connection_blocked = Signal(str)          # 미연결로 작업을 시작하지 않았음
 
     def __init__(self, main_window=None) -> None:
         super().__init__(main_window)
@@ -29,7 +43,12 @@ class NovelController(QObject):
         self._services: dict[str, Any] = {}
         self._active_stream_callback: Optional[Callable[[str], None]] = None
         self._cancel_token = CancelToken()
-        self._job_queue: list[tuple] = []
+        self._job_queue: list[JobQueueItem] = []
+        # AI 작업 시작 전 연결 확인 콜백. MainWindow가 주입하며,
+        # None이면 게이트를 건너뛰고 기존 동작(즉시 시작)을 유지한다.
+        self._connection_gate: Optional[Callable[[], Any]] = None
+        # 연결 확인(게이트) 결과를 기다리는 실제 작업.
+        self._gate_pending_job: Optional[Job] = None
 
     def set_main_window(self, main_window) -> None:
         self.main_window = main_window
@@ -91,7 +110,68 @@ class NovelController(QObject):
         except Exception:
             pass
         self.status_changed.emit(label)
+        gate = self._connection_gate
+        if gate is None:
+            self.pool.start(job)
+            return
+        # AI 작업 전에 연결 확인(게이트)을 같은 스레드 풀에서 먼저 실행한다.
+        # UI 스레드를 블로킹하지 않고, 미연결이면 실제 작업을 시작하지 않는다.
+        # 결과는 Controller(QObject)의 슬롯으로 큐 전달해 메인 스레드에서 처리한다.
+        # (워커 스레드에서 pool.start()를 호출하면 스레드 풀이 포화 상태일 때
+        #  다음 실행이 지연될 수 있으므로 반드시 메인 스레드에서 시작한다.)
+        self._gate_pending_job = job
+        pre = Job(gate)
+        pre.signals.finished.connect(self._on_gate_finished)
+        pre.signals.error.connect(self._on_gate_error)
+        self.pool.start(pre)
+
+    @Slot(object)
+    def _on_gate_finished(self, result: object) -> None:
+        """게이트 프로브가 값을 반환했을 때 (메인 스레드)."""
+        job = self._gate_pending_job
+        self._gate_pending_job = None
+        self._on_gate_result(job, result)
+
+    @Slot(str)
+    def _on_gate_error(self, error: str) -> None:
+        """게이트 프로브 자체가 실패했을 때 (메인 스레드)."""
+        job = self._gate_pending_job
+        self._gate_pending_job = None
+        self._on_gate_result(job, (False, str(error)))
+
+    def _on_gate_result(self, job: Optional[Job], result: object) -> None:
+        """사전 연결 확인 결과에 따라 실제 작업을 시작하거나 차단한다."""
+        if isinstance(result, tuple):
+            ok, message = result
+        else:
+            ok, message = False, str(result)
+        message = str(message or '')
+        if self._cancel_token.is_set():
+            # 게이트 대기 중 정지 요청이 들어왔으면 조용히 종료한다.
+            self._job_queue.clear()
+            self._finish_job_state()
+            self.status_changed.emit("작업이 취소되었습니다.")
+            return
+        self.connection_checked.emit(ok, message)
+        if ok is False:
+            # 연결이 없으면 대기 중인 작업도 무의미하므로 함께 비운다(경고 1회).
+            self._job_queue.clear()
+            self._finish_job_state()
+            self.connection_blocked.emit(message)
+            return
+        if job is None:
+            self._finish_job_state()
+            return
         self.pool.start(job)
+
+    def set_connection_gate(self, probe: Optional[Callable[[], Any]]) -> None:
+        """AI 작업 시작 전 연결 확인 콜백을 주입한다.
+
+        ``probe()``는 워커 스레드에서 호출되며 ``(ok, message)`` 튜플을 반환한다.
+        ``ok``는 True(연결됨)/False(미연결)/None(판정 불가)이다.
+        ``None``을 전달하면 게이트를 사용하지 않는다(기존 동작).
+        """
+        self._connection_gate = probe
 
     def cancelled_check(self) -> Callable[[], bool]:
         """현재 작업의 취소 여부를 묻는 함수(순차 AI 호출 경계에서 사용)."""
@@ -108,12 +188,10 @@ class NovelController(QObject):
         # 대기 중인 작업이 있으면 다음 작업을 시작한다.
         if self._job_queue:
             queued = self._job_queue.pop(0)
-            if queued[5]:  # is_stream=True인 스트리밍 작업이다.
-                label, fn, done_cb, error_cb, cancelled_cb, _, progress_cb = queued
-                self._run_stream(label, fn, done_cb, progress_cb, error_cb, cancelled_cb)
-            else:
-                label, fn, done_cb, error_cb, cancelled_cb, _ = queued
-                self._run_job(label, fn, done_cb, error_cb, cancelled_cb)
+            if queued.is_stream:  # 스트리밍 작업이다.
+                self._run_stream(queued.label, queued.fn, queued.done_callback, queued.progress_callback, queued.error_callback, queued.cancelled_callback)
+            else:  # 일반 작업이다.
+                self._run_job(queued.label, queued.fn, queued.done_callback, queued.error_callback, queued.cancelled_callback)
 
     def _run_job(
         self,
@@ -126,9 +204,9 @@ class NovelController(QObject):
         """일반 작업을 단일 실행 경로로 처리한다."""
         if self._busy:
             # 현재 작업이 끝난 뒤 실행하도록 작업을 대기열에 넣는다.
-            self._job_queue.append((
+            self._job_queue.append(JobQueueItem(
                 label, fn, done_callback, error_callback, cancelled_callback,
-                False  # is_stream=False인 일반 작업이다.
+                False, None,
             ))
             return True  # 작업이 대기열에 등록되었음을 표시한다.
 
@@ -151,10 +229,9 @@ class NovelController(QObject):
         """스트리밍 작업을 Controller가 일관되게 관리한다."""
         if self._busy:
             # 현재 작업이 끝난 뒤 실행하도록 작업을 대기열에 넣는다.
-            self._job_queue.append((
+            self._job_queue.append(JobQueueItem(
                 label, fn, done_callback, error_callback, cancelled_callback,
-                True,  # 스트리밍 작업임을 표시한다.
-                progress_callback  # 진행 상황 콜백을 저장한다.
+                True, progress_callback,
             ))
             return True  # 작업이 대기열에 등록되었음을 표시한다.
 
@@ -257,7 +334,7 @@ class NovelController(QObject):
         return True
 
     def generate_end_state(self, chapter: int, text: str, done_callback=None, error_callback=None, cancelled_callback=None) -> bool:
-        return self._run_job("화 종료 상태 생성 중...", lambda: self.end_state_service.generate(int(chapter), text), done_callback, error_callback, cancelled_callback)
+        return self._run_job("연속성 기록 생성 중...", lambda: self.end_state_service.generate(int(chapter), text), done_callback, error_callback, cancelled_callback)
 
     # ---------- 프로젝트 ----------
     def new_project(self, path: str) -> bool:

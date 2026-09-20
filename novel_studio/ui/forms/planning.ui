@@ -2,51 +2,14 @@
 <ui version="4.0">
  <class>PlanningPage</class>
  <widget class="QWidget" name="PlanningPage">
-  <layout class="QVBoxLayout" name="l">
-   <item>
-    <layout class="QHBoxLayout" name="ideaHead">
-     <item><widget class="QLabel" name="ideaLbl"><property name="text"><string>아이디어</string></property></widget></item>
-     <item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI 아이디어 생성</string></property></widget></item>
-     <item><widget class="QPushButton" name="useBtn"><property name="text"><string>이 아이디어 사용</string></property></widget></item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QLabel" name="hint">
-     <property name="text">
-      <string>아이디어가 없어도 됩니다. AI 아이디어 생성은 한 번에 하나의 시안만 보여주며 다시 누르면 새 시안으로 교체합니다. 아래에 아이디어를 적고 [이 아이디어 사용]을 누른 뒤 [AI 마스터 기획 생성]으로 이어가세요.</string>
-     </property>
-     <property name="wordWrap"><bool>true</bool></property>
-    </widget>
-   </item>
-   <item><widget class="QPlainTextEdit" name="ideaEdit"/></item>
-   <item>
-    <layout class="QHBoxLayout" name="mHead">
-     <item><widget class="QLabel" name="mLbl"><property name="text"><string>마스터 기획</string></property></widget></item>
-     <item><widget class="QPushButton" name="masterBtn"><property name="text"><string>AI 마스터 기획 생성</string></property></widget></item>
-     <item><widget class="QPushButton" name="saveMasterBtn"><property name="text"><string>마스터 기획 저장</string></property></widget></item>
-     <item><widget class="QPushButton" name="diffMasterBtn"><property name="text"><string>변경점 검사</string></property></widget></item>
-    </layout>
-   </item>
-   <item><widget class="QPlainTextEdit" name="masterEdit"/></item>
-   <item>
-    <layout class="QHBoxLayout" name="cHead">
-     <item><widget class="QLabel" name="cLbl"><property name="text"><string>장편 핵심 기준 (Plan Contract)</string></property></widget></item>
-     <item><widget class="QPushButton" name="contractBtn"><property name="text"><string>AI 핵심 기준 추출</string></property></widget></item>
-     <item><widget class="QPushButton" name="lockBtn"><property name="text"><string>핵심 기준 잠금</string></property></widget></item>
-     <item><widget class="QPushButton" name="saveContractBtn"><property name="text"><string>핵심 기준 저장</string></property></widget></item>
-    </layout>
-   </item>
-   <item><widget class="QPlainTextEdit" name="contractEdit"/></item>
-   <item>
-    <layout class="QHBoxLayout" name="pHead">
-     <item><widget class="QLabel" name="pLbl"><property name="text"><string>전체 플롯 (마스터 플롯)</string></property></widget></item>
-     <item><widget class="QPushButton" name="masterPlotBtn"><property name="text"><string>AI 전체 플롯 생성</string></property></widget></item>
-     <item><widget class="QPushButton" name="savePlotBtn"><property name="text"><string>전체 플롯 저장</string></property></widget></item>
-    </layout>
-   </item>
-   <item><widget class="QPlainTextEdit" name="masterPlotEdit"/></item>
+  <layout class="QVBoxLayout" name="l"><property name="spacing"><number>10</number></property><property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><property name="bottomMargin"><number>10</number></property>
+   <item><layout class="QHBoxLayout" name="pageHeader"><item><widget class="QLabel" name="pageTitle"><property name="text"><string>기획 워크스페이스</string></property></widget></item><item><spacer name="spacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QLabel" name="pageHint"><property name="text"><string>아이디어 → 소설 설계 → 작품 규칙 → 전체 줄거리</string></property></widget></item></layout></item>
+   <item><layout class="QGridLayout" name="cardGrid"><property name="horizontalSpacing"><number>10</number></property><property name="verticalSpacing"><number>10</number></property>
+    <item row="0" column="0"><widget class="QFrame" name="ideaCard"><property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property><layout class="QVBoxLayout" name="ideaLayout"><item><layout class="QHBoxLayout" name="ideaHead"><item><widget class="QLabel" name="ideaLbl"><property name="text"><string>① 이야기 아이디어</string></property></widget></item><item><spacer name="s1"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI 아이디어 생성</string></property></widget></item><item><widget class="QPushButton" name="useBtn"><property name="text"><string>이 아이디어 사용</string></property></widget></item></layout></item><item><widget class="QLabel" name="hint"><property name="text"><string>초안을 만들고 확정한 뒤 다음 단계로 이동합니다.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item><item><widget class="QPlainTextEdit" name="ideaEdit"/></item></layout></widget></item>
+    <item row="0" column="1"><widget class="QFrame" name="masterCard"><property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property><layout class="QVBoxLayout" name="masterLayout"><item><layout class="QHBoxLayout" name="mHead"><item><widget class="QLabel" name="mLbl"><property name="text"><string>② 소설 설계</string></property></widget></item><item><spacer name="s2"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QPushButton" name="masterBtn"><property name="text"><string>AI 소설 설계 생성</string></property></widget></item><item><widget class="QPushButton" name="saveMasterBtn"><property name="text"><string>저장</string></property></widget></item><item><widget class="QPushButton" name="diffMasterBtn"><property name="text"><string>변경점 검사</string></property></widget></item></layout></item><item><widget class="QPlainTextEdit" name="masterEdit"/></item></layout></widget></item>
+    <item row="1" column="0"><widget class="QFrame" name="contractCard"><property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property><layout class="QVBoxLayout" name="contractLayout"><item><layout class="QHBoxLayout" name="cHead"><item><widget class="QLabel" name="cLbl"><property name="text"><string>③ 작품 규칙</string></property></widget></item><item><spacer name="s3"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QPushButton" name="contractBtn"><property name="text"><string>AI 작품 규칙 추출</string></property></widget></item><item><widget class="QPushButton" name="lockBtn"><property name="text"><string>잠금</string></property></widget></item><item><widget class="QPushButton" name="saveContractBtn"><property name="text"><string>저장</string></property></widget></item></layout></item><item><widget class="QPlainTextEdit" name="contractEdit"/></item></layout></widget></item>
+    <item row="1" column="1"><widget class="QFrame" name="plotCard"><property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property><layout class="QVBoxLayout" name="plotLayout"><item><layout class="QHBoxLayout" name="pHead"><item><widget class="QLabel" name="pLbl"><property name="text"><string>④ 전체 줄거리</string></property></widget></item><item><spacer name="s4"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QPushButton" name="masterPlotBtn"><property name="text"><string>AI 전체 줄거리 생성</string></property></widget></item><item><widget class="QPushButton" name="savePlotBtn"><property name="text"><string>저장</string></property></widget></item></layout></item><item><widget class="QPlainTextEdit" name="masterPlotEdit"/></item></layout></widget></item>
+   </layout></item>
   </layout>
- </widget>
- <resources/>
- <connections/>
+ </widget><resources/><connections/>
 </ui>

@@ -135,6 +135,15 @@ def test_settings_dialog_title_and_size_follow_ui_file(qtbot, tmp_path):
     window = MainWindow(root)
     qtbot.addWidget(window)
 
+    # 로컬 AI 서버(LM Studio) 실행 여부와 무관하게 '연결 확인 전' 상태를 검증한다
+    class _NoModelsProvider:
+        config = {}
+
+        def list_models(self):
+            return []
+
+    window.providers._build = lambda pid, cfg: _NoModelsProvider()
+
     d = AISettingsDialog(window.providers, window.app, window)
     qtbot.addWidget(d)
     # 제목: .ui의 windowTitle을 읽어 실제 창 제목에 적용
@@ -248,6 +257,15 @@ def test_connection_test_gates_model_list_and_status(qtbot, tmp_path):
     window = MainWindow(root)
     qtbot.addWidget(window)
 
+    # 로컬 AI 서버(LM Studio) 실행 여부와 무관하게 '연결 확인 전' 상태를 검증한다
+    class _NoModelsProvider:
+        config = {}
+
+        def list_models(self):
+            return []
+
+    window.providers._build = lambda pid, cfg: _NoModelsProvider()
+
     d = AISettingsDialog(window.providers, window.app, window)
     qtbot.addWidget(d)
     # 연결 테스트 완료 콜백이 early-return하지 않도록 창을 표시한다
@@ -328,3 +346,220 @@ def test_chat_window_title_and_size_follow_ui_file(qtbot, tmp_path):
     assert (cw.width(), cw.height()) != (620, 760)
     assert cw.height() < 700
     window.close()
+
+
+def test_connection_indicator_auto_updates_on_startup(qtbot, tmp_path):
+    """시작 직후 클릭 없이 연결 상태가 자동 반영되고, 팝업은 뜨지 않아야 한다."""
+    from PySide6.QtWidgets import QMessageBox, QPushButton
+
+    from novel_studio.core.project import ProjectManager
+    from novel_studio.ui.main_window import MainWindow
+
+    root = tmp_path / "novel"
+    ProjectManager().create(
+        root=root,
+        title="자동 연결 확인",
+        genre="선협",
+        mood="진중",
+        total_chapters=3,
+        chapter_chars=5000,
+        tolerance=300,
+    )
+    window = MainWindow(root)
+    qtbot.addWidget(window)
+
+    class _OkProvider:
+        config = {}
+
+        def list_models(self):
+            return ["model-a", "model-b", "model-c"]
+
+    window.providers._build = lambda pid, cfg: _OkProvider()
+    popups = []
+    orig = {n: getattr(QMessageBox, n) for n in ("information", "critical", "warning")}
+    for name in orig:
+        setattr(QMessageBox, name, lambda *a, _n=name, **k: popups.append(_n))
+    try:
+        # 시작 직후 자동 확인(팝업 없음)으로 초록(연결됨)이 된다
+        qtbot.waitUntil(lambda: getattr(window, "_conn_ok", None) is True, timeout=15000)
+        btn = window.ui.findChild(QPushButton, "testConnBtn")
+        assert "연결됨" in btn.toolTip()
+        assert popups == []  # 자동 확인은 조용해야 한다
+    finally:
+        for name, fn in orig.items():
+            setattr(QMessageBox, name, fn)
+    window.close()
+
+
+def test_ai_job_blocked_with_warning_when_not_connected(qtbot, tmp_path):
+    """서버가 꺼져 있으면 경고 팝업 후 실제 작업이 시작되지 않아야 한다."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from novel_studio.core.project import ProjectManager
+    from novel_studio.ui.main_window import MainWindow
+
+    root = tmp_path / "novel"
+    ProjectManager().create(
+        root=root,
+        title="미연결 차단 검증",
+        genre="선협",
+        mood="진중",
+        total_chapters=3,
+        chapter_chars=5000,
+        tolerance=300,
+    )
+    window = MainWindow(root)
+    qtbot.addWidget(window)
+    # 시작 직후 자동 확인이 끝난 뒤 스텁으로 교체해 결과가 섞이지 않게 한다
+    qtbot.waitUntil(lambda: not getattr(window, "_conn_checking", True), timeout=15000)
+
+    class _DownProvider:
+        config = {}
+
+        def list_models(self):
+            raise RuntimeError("connection refused")
+
+    window.providers._build = lambda pid, cfg: _DownProvider()
+    warnings = []
+    orig_warning = QMessageBox.warning
+    QMessageBox.warning = lambda *a, **k: warnings.append(a[2] if len(a) > 2 else k.get("text", ""))
+    ran = {"called": False}
+
+    def work():
+        ran["called"] = True
+        return "result"
+
+    try:
+        window._run("테스트 작업", work, lambda r: None)
+        qtbot.waitUntil(lambda: len(warnings) == 1, timeout=15000)
+        assert getattr(window, "_conn_ok", None) is False
+        assert ran["called"] is False   # 실제 작업이 실행되지 않았다
+        assert len(warnings) == 1       # 경고 팝업 1회
+        assert "연결할 수 없" in warnings[0]
+    finally:
+        QMessageBox.warning = orig_warning
+    window.close()
+
+
+def test_save_master_does_not_call_ai_when_declined(qtbot, tmp_path):
+    """저장+거절: DB 저장은 되고 AI(인물 동기화)는 호출되지 않아야 한다."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from novel_studio.core.project import ProjectManager
+    from novel_studio.ui.main_window import MainWindow
+
+    root = tmp_path / "novel"
+    ProjectManager().create(
+        root=root,
+        title="마스터 저장 분리 검증",
+        genre="선협",
+        mood="진중",
+        total_chapters=3,
+        chapter_chars=5000,
+        tolerance=300,
+    )
+    window = MainWindow(root)
+    qtbot.addWidget(window)
+
+    window.planning_view.masterEdit.setPlainText("수정된 소설 설계 본문")
+    calls = []
+    orig_sync = window.sync_master_characters
+    window.sync_master_characters = lambda: calls.append(1) or orig_sync()
+    orig_question = QMessageBox.question
+    QMessageBox.question = lambda *a, **k: QMessageBox.No
+    try:
+        window.save_master()
+    finally:
+        QMessageBox.question = orig_question
+    assert calls == []                                    # AI 호출 없음
+    assert window.db.get_plan() == "수정된 소설 설계 본문"  # 순수 저장은 됨
+    window.close()
+
+
+def test_save_master_syncs_once_when_accepted(qtbot, tmp_path):
+    """저장+수락: 인물 동기화가 정확히 1회만 실행되어야 한다(중복 호출 회귀 방지)."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from novel_studio.core.project import ProjectManager
+    from novel_studio.ui.main_window import MainWindow
+
+    root = tmp_path / "novel"
+    ProjectManager().create(
+        root=root,
+        title="마스터 저장 동기화 검증",
+        genre="선협",
+        mood="진중",
+        total_chapters=3,
+        chapter_chars=5000,
+        tolerance=300,
+    )
+    window = MainWindow(root)
+    qtbot.addWidget(window)
+
+    window.planning_view.masterEdit.setPlainText("수락 저장 본문")
+    calls = []
+    orig_sync = window.sync_master_characters
+    orig_after = window._after_master_saved
+
+    def fake_sync():
+        calls.append(1)
+        return 2
+
+    def direct_after(_=None):
+        # AI Job 스레드 경계를 타지 않고 즉시 실행하는 테스트용 대체 경로.
+        # 실제 코드는 _run 경유로 동일한 1회 호출을 보장한다.
+        window._on_master_characters_synced(fake_sync())
+
+    window.sync_master_characters = fake_sync
+    window._after_master_saved = direct_after
+    orig_question = QMessageBox.question
+    QMessageBox.question = lambda *a, **k: QMessageBox.Yes
+    try:
+        window.save_master()
+    finally:
+        QMessageBox.question = orig_question
+        window.sync_master_characters = orig_sync
+        window._after_master_saved = orig_after
+    assert calls == [1]                                   # 정확히 1회
+    assert window.db.get_plan() == "수락 저장 본문"
+    assert "인물 DB 2개" in window.statusBar().currentMessage()
+    window.close()
+
+
+def test_ai_job_runs_when_connected(qtbot, tmp_path):
+    """연결되어 있으면 사전 확인 후 실제 작업이 정상 실행되어야 한다."""
+    from novel_studio.core.project import ProjectManager
+    from novel_studio.ui.main_window import MainWindow
+
+    root = tmp_path / "novel"
+    ProjectManager().create(
+        root=root,
+        title="연결됨 통과 검증",
+        genre="선협",
+        mood="진중",
+        total_chapters=3,
+        chapter_chars=5000,
+        tolerance=300,
+    )
+    window = MainWindow(root)
+    qtbot.addWidget(window)
+    qtbot.waitUntil(lambda: not getattr(window, "_conn_checking", True), timeout=15000)
+
+    class _OkProvider:
+        config = {}
+
+        def list_models(self):
+            return ["model-a"]
+
+    window.providers._build = lambda pid, cfg: _OkProvider()
+    ran = {}
+
+    def work():
+        ran["ok"] = True
+        return "result"
+
+    window._run("테스트 작업", work, lambda r: None)
+    qtbot.waitUntil(lambda: ran.get("ok") is True, timeout=15000)
+    assert getattr(window, "_conn_ok", None) is True
+    window.close()
+

@@ -415,8 +415,8 @@ class SQLiteStorage:
         self.conn.execute("DELETE FROM search_documents")
         source_specs = {
             "meta": ("SELECT key,value FROM meta", lambda r: f"{r['key']} {r['value']}"),
-            "plan": ("SELECT id,content FROM plans", lambda r: f"마스터 기획 {r['content']}"),
-            "contract": ("SELECT id,content FROM contract", lambda r: f"핵심 기준 {r['content']}"),
+            "plan": ("SELECT id,content FROM plans", lambda r: f"소설 설계 {r['content']}"),
+            "contract": ("SELECT id,content FROM contract", lambda r: f"작품 규칙 {r['content']}"),
             "section": ("SELECT section,content FROM section_contents", lambda r: f"{r['section']} {r['content']}"),
             "story": ("SELECT start_chapter,end_chapter,content FROM story_sections", lambda r: f"{r['start_chapter']}~{r['end_chapter']}화 {r['content']}"),
             "substory": ("SELECT start_chapter,end_chapter,title,content FROM story_subsections", lambda r: f"{r['start_chapter']}~{r['end_chapter']}화 {r['title']} {r['content']}"),
@@ -480,7 +480,7 @@ class SQLiteStorage:
         except Exception:
             pass
         # 색인이 비어 있거나 FTS가 특정 입력을 해석하지 못하면 기존 LIKE 검색을 사용한다.
-        specs=[("작품","meta",["key","value"]),("장기 스토리","story_sections",["start_chapter","end_chapter","content"]),("세부 스토리","story_subsections",["start_chapter","end_chapter","title","content"]),("화별 스토리","chapter_stories",["chapter_number","title","content"]),("인물","characters",["name","role","profile","personality","goal","secret"]),("세계관","world_entities",["name","category","description","rules"]),("복선","foreshadowing",["code","title","public_info","author_truth","notes"]),("시간축","timeline_events",["chapter_number","story_date","title","description","location"]),("핵심 사건","major_events",["title","description","consequence"]),("화 종료 상태","chapter_states",["chapter_number","state","status"]),("아이디어","ideas",["content"]),("설정","section_contents",["section","content"])]
+        specs=[("작품","meta",["key","value"]),("구간별 상세 스토리","story_sections",["start_chapter","end_chapter","content"]),("세부 스토리","story_subsections",["start_chapter","end_chapter","title","content"]),("화별 스토리","chapter_stories",["chapter_number","title","content"]),("인물","characters",["name","role","profile","personality","goal","secret"]),("세계관","world_entities",["name","category","description","rules"]),("복선","foreshadowing",["code","title","public_info","author_truth","notes"]),("시간축","timeline_events",["chapter_number","story_date","title","description","location"]),("핵심 사건","major_events",["title","description","consequence"]),("연속성 기록","chapter_states",["chapter_number","state","status"]),("아이디어","ideas",["content"]),("설정","section_contents",["section","content"])]
         for token in tokens:
             like=f"%{token}%"
             for label,table,cols in specs:

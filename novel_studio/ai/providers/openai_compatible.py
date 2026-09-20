@@ -1,7 +1,7 @@
 import json
 import urllib.request
 import urllib.error
-from .base import AIProvider, ProviderError
+from .base import AIProvider, CONNECT_TIMEOUT, ProviderError
 from novel_studio.utils.cancellation import JobCancelled
 from novel_studio.utils.retry import retry_with_backoff
 
@@ -26,7 +26,7 @@ class OpenAICompatibleProvider(AIProvider):
     def list_models(self):
         try:
             req = urllib.request.Request(self._base() + '/models', headers=self._headers())
-            with urllib.request.urlopen(req, timeout=20) as r:
+            with urllib.request.urlopen(req, timeout=CONNECT_TIMEOUT) as r:
                 d = json.loads(r.read().decode())
             return [str(x.get('id')) for x in d.get('data', []) if x.get('id')]
         except Exception as e:

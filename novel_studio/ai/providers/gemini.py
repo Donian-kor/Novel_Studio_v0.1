@@ -46,14 +46,17 @@ class GeminiProvider(AIProvider):
         return ''.join(p.get('text', '') for c in d.get('candidates', []) for p in c.get('content', {}).get('parts', []) if p.get('text'))
     
     def _chat_stream_impl(self, messages, *, temperature, top_p, max_tokens, timeout=None):
-        # Gemini는 현재 스트리밍을 지원하지 않으므로 기본 구현 사용 (base의 fallback 사용)
-        # 실제 구현 시 SSE 스트리밍 API 사용 필요
+        """Gemini 스트리밍 미구현. 전체를 한 번에 반환하는 폴백이다.
+
+        실제 SSE 스트리밍이 필요하면 이 메서드를 재구현하거나,
+        별도의 스트리밍 경로를 구현 후 super().chat_stream()을 호출하라.
+        """
         text = self._chat_impl(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
         yield text
-    
+
     def chat(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         return super().chat(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
-    
+
     def chat_stream(self, messages, *, temperature, top_p, max_tokens, timeout=None):
         return super().chat_stream(messages, temperature=temperature, top_p=top_p, max_tokens=max_tokens, timeout=timeout)
 

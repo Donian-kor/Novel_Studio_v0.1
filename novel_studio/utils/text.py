@@ -1,5 +1,7 @@
 def count_chars(text, include_spaces=False):
-    return len(text) if include_spaces else len(''.join(text.split()))
+    if include_spaces:
+        return len(text)
+    return len(''.join(text.split()))
 
 
 def check_spelling(text):

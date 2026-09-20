@@ -385,7 +385,7 @@ class EntitiesView(BaseView):
     def _master(self):
         t = self.w.db.get_plan()
         if not t.strip():
-            QMessageBox.warning(self.w, '마스터 기획 필요', '먼저 [기획]에서 마스터 기획을 생성하거나 저장하세요.')
+            QMessageBox.warning(self.w, '소설 설계 필요', '먼저 [기획]에서 소설 설계을 생성하거나 저장하세요.')
             return ''
         return t
 
@@ -396,7 +396,7 @@ class EntitiesView(BaseView):
             return
         total = int(self.w.pm.settings['target_chapters'])
         self.w._run(
-            f'마스터 기획에서 {cat} 자동 추출/보완 중...',
+            f'소설 설계에서 {cat} 자동 추출/보완 중...',
             lambda: self.w.ai.generate(entity_catalog_prompt(cat, master, total), temperature=.35, max_tokens=12000),
             lambda t: self._store_catalog(cat, t)
         )
@@ -404,7 +404,7 @@ class EntitiesView(BaseView):
     def _store_catalog(self, cat, text):
         items = parse_entity_catalog(text)
         if not items:
-            QMessageBox.warning(self.w, 'AI 결과 오류', '마스터 기획에서 설정 항목을 추출하지 못했습니다. AI 응답 형식을 확인하세요.')
+            QMessageBox.warning(self.w, 'AI 결과 오류', '소설 설계에서 설정 항목을 추출하지 못했습니다. AI 응답 형식을 확인하세요.')
             return
 
         db = self.w.db
@@ -470,4 +470,4 @@ class EntitiesView(BaseView):
                 continue
 
         self.refresh()
-        QMessageBox.information(self.w, 'AI 자동 추가', f'마스터 기획에서 {count}개 항목을 추가/갱신했습니다.')
+        QMessageBox.information(self.w, 'AI 자동 추가', f'소설 설계에서 {count}개 항목을 추가/갱신했습니다.')

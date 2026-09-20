@@ -255,62 +255,94 @@ class AISettingsDialog(QDialog):
 
 
 class ProjectSettingsDialog(QDialog):
-    """요청 1-3: 현재 프로젝트 설정(작품명/장르/분위기/화수/글자수/오차/구간) 편집."""
+    """프로젝트 전체 제작 규모와 스토리/원고 목표 분량을 편집한다."""
 
     def __init__(self, pm, parent=None):
         super().__init__(parent)
         self.pm = pm
         s = pm.settings
         self.setWindowTitle('프로젝트 설정')
-        lay = QVBoxLayout(self)
-        form = QFormLayout()
+        self.resize(560, 560)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 16, 16, 16)
+        root.setSpacing(12)
+
+        # 작품 기본 설정
+        basic = QGroupBox('① 작품 기본 설정')
+        form = QFormLayout(basic)
         self.titleEdit = QLineEdit(str(s.get('title', '')))
         self.genreEdit = QComboBox(); self.genreEdit.setEditable(True)
         from novel_studio.ai.prompts import GENRES
         self.genreEdit.addItems([g for g in GENRES if g != '직접 입력'])
         self.genreEdit.setCurrentText(str(s.get('genre', '') or '선협'))
         self.moodEdit = QLineEdit(str(s.get('mood', '')))
-        self.totalSpin = QSpinBox(); self.totalSpin.setRange(1, 5000)
-        self.totalSpin.setValue(int(s.get('target_chapters', 500)))
-        self.charSpin = QSpinBox(); self.charSpin.setRange(500, 30000)
-        self.charSpin.setValue(int(s.get('chapter_chars', 5000)))
-        self.tolSpin = QSpinBox(); self.tolSpin.setRange(0, 5000)
-        self.tolSpin.setValue(int(s.get('tolerance', 300)))
-        self.longStorySpin = QSpinBox(); self.longStorySpin.setRange(1, 500)
-        self.longStorySpin.setValue(int(s.get('long_story_size', 50)))
-        self.subStorySpin = QSpinBox(); self.subStorySpin.setRange(1, 100)
-        self.subStorySpin.setValue(int(s.get('sub_story_size', 10)))
+        self.totalSpin = QSpinBox(); self.totalSpin.setRange(1, 5000); self.totalSpin.setValue(int(s.get('target_chapters', 500)))
         form.addRow('작품명', self.titleEdit)
         form.addRow('장르', self.genreEdit)
         form.addRow('분위기', self.moodEdit)
         form.addRow('총 화수', self.totalSpin)
-        form.addRow('화당 목표 글자수', self.charSpin)
-        form.addRow('허용 오차 (±글자수)', self.tolSpin)
-        form.addRow('장기 스토리 구간 크기 (화)', self.longStorySpin)
-        form.addRow('세부 스토리 구간 크기 (화)', self.subStorySpin)
-        lay.addLayout(form)
-        help_ = QLabel('허용 오차: AI 집필 시 목표 글자수 ± 범위 (예: 5000±300 → 4700~5300자).\n'
-                       '장기 구간과 세부 구간은 스토리 화면의 계층 크기입니다. 예: 장기 50화 + 세부 10화 → 1~50화 안에 1~10화, 11~20화 …로 구성됩니다.')
-        help_.setWordWrap(True)
-        lay.addWidget(help_)
+        root.addWidget(basic)
+
+        # 스토리 구조
+        structure = QGroupBox('② 스토리 구조 설정')
+        sform = QFormLayout(structure)
+        self.detailCountSpin = QSpinBox(); self.detailCountSpin.setRange(1, 5000)
+        self.detailCountSpin.setValue(max(1, min(int(s.get('detail_section_count', s.get('long_story_size', 10))), int(s.get('target_chapters', 500)))))
+        sform.addRow('세부 스토리 구간 수', self.detailCountSpin)
+        help1 = QLabel('전체 화수를 지정한 구간 수로 나눠 구간별 상세 스토리를 만듭니다. 예: 100화·5구간 → 1~20화, 21~40화 … 81~100화')
+        help1.setWordWrap(True); sform.addRow('', help1)
+        root.addWidget(structure)
+
+        # 스토리 분량
+        story = QGroupBox('③ 스토리 생성 분량')
+        tform = QFormLayout(story)
+        self.detailCharsSpin = QSpinBox(); self.detailCharsSpin.setRange(100, 10000); self.detailCharsSpin.setValue(int(s.get('detail_story_chars', 500)))
+        self.chapterStoryCharsSpin = QSpinBox(); self.chapterStoryCharsSpin.setRange(100, 5000); self.chapterStoryCharsSpin.setValue(int(s.get('chapter_story_chars', 500)))
+        self.detailCharsSpin.setSuffix(' 자')
+        self.chapterStoryCharsSpin.setSuffix(' 자')
+        tform.addRow('구간별 상세 스토리', self.detailCharsSpin)
+        tform.addRow('화별 스토리', self.chapterStoryCharsSpin)
+        help2 = QLabel('설정한 글자수는 목표 분량입니다. 문장을 글자수에서 강제로 잘라내지 않고, AI가 자연스럽게 마무리하도록 요청합니다.')
+        help2.setWordWrap(True); tform.addRow('', help2)
+        root.addWidget(story)
+
+        # 원고 분량
+        manuscript = QGroupBox('④ 원고 집필 설정')
+        mform = QFormLayout(manuscript)
+        self.charSpin = QSpinBox(); self.charSpin.setRange(500, 30000); self.charSpin.setValue(int(s.get('chapter_chars', 5000))); self.charSpin.setSuffix(' 자')
+        self.tolSpin = QSpinBox(); self.tolSpin.setRange(0, 5000); self.tolSpin.setValue(int(s.get('tolerance', 300))); self.tolSpin.setSuffix(' 자')
+        mform.addRow('화당 원고 목표', self.charSpin)
+        mform.addRow('허용 오차 (±)', self.tolSpin)
+        mhelp = QLabel('원고 집필 목표입니다. 예: 5000자 ±300 → 4700~5300자')
+        mhelp.setWordWrap(True); mform.addRow('', mhelp)
+        root.addWidget(manuscript)
+
         row = QHBoxLayout()
+        row.addStretch(1)
         save = QPushButton('저장'); save.clicked.connect(self.accept_changes)
         cancel = QPushButton('취소'); cancel.clicked.connect(self.reject)
         row.addWidget(save); row.addWidget(cancel)
-        lay.addLayout(row)
-        self.resize(500, 470)
+        root.addLayout(row)
 
     def accept_changes(self):
+        total = self.totalSpin.value()
+        count = min(self.detailCountSpin.value(), total)
         vals = {
             'title': self.titleEdit.text().strip() or '새 작품',
             'genre': self.genreEdit.currentText().strip() or '선협',
             'mood': self.moodEdit.text().strip(),
-            'target_chapters': self.totalSpin.value(),
+            'target_chapters': total,
             'chapter_chars': self.charSpin.value(),
             'tolerance': self.tolSpin.value(),
-            'section_size': self.subStorySpin.value(),
-            'long_story_size': self.longStorySpin.value(),
-            'sub_story_size': self.subStorySpin.value(),
+            'detail_section_count': count,
+            'detail_story_chars': self.detailCharsSpin.value(),
+            'chapter_story_chars': self.chapterStoryCharsSpin.value(),
+            # 레거시 설정은 유지하되 새 값과 동기화하여 기존 코드/프로젝트를 보호한다.
+            'section_size': count,
+            'long_story_size': count,
+            'sub_story_size': count,
         }
         self.pm.save_settings(vals)
         self.accept()
+

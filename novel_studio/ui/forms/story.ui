@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>StoryView</class>
+ <widget class="QWidget" name="StoryView">
+  <property name="windowTitle"><string>스토리</string></property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing"><number>10</number></property>
+   <property name="leftMargin"><number>10</number></property>
+   <property name="topMargin"><number>10</number></property>
+   <property name="rightMargin"><number>10</number></property>
+   <property name="bottomMargin"><number>10</number></property>
+   <item>
+    <layout class="QHBoxLayout" name="pageHeader">
+     <item><widget class="QLabel" name="titleLabel"><property name="text"><string>스토리 제작</string></property></widget></item>
+     <item><spacer name="headerSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item>
+     <item><widget class="QLabel" name="flowLabel"><property name="text"><string>전체 줄거리 → 구간별 상세 → 화별 스토리</string></property></widget></item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="pipelineLayout">
+     <property name="spacing"><number>10</number></property>
+     <item>
+      <widget class="QFrame" name="masterCard">
+       <property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property>
+       <property name="minimumSize"><size><width>250</width><height>0</height></size></property>
+       <layout class="QVBoxLayout" name="masterLayout">
+        <property name="spacing"><number>8</number></property>
+        <item><widget class="QLabel" name="masterLabel"><property name="text"><string>① 전체 줄거리</string></property></widget></item>
+        <item><widget class="QLabel" name="masterStatus"><property name="wordWrap"><bool>true</bool></property><property name="text"><string>소설 전체(1~총 화수)의 방향과 결말을 정하는 전체 설계도입니다. 생성·수정은 [기획]에서 합니다.</string></property></widget></item>
+        <item><widget class="QPlainTextEdit" name="masterPlotPreview"><property name="readOnly"><bool>true</bool></property><property name="placeholderText"><string>기획에서 생성한 전체 줄거리이 여기에 표시됩니다.</string></property></widget></item>
+        <item><widget class="QLabel" name="masterHint"><property name="wordWrap"><bool>true</bool></property><property name="text"><string>※ 이 단계는 중복 생성을 하지 않습니다. [기획]의 AI 전체 줄거리을 기준으로 다음 단계가 진행됩니다.</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+     <item><widget class="QLabel" name="arrow1"><property name="text"><string>→</string></property></widget></item>
+     <item>
+      <widget class="QFrame" name="detailCard">
+       <property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property>
+       <property name="minimumSize"><size><width>300</width><height>0</height></size></property>
+       <layout class="QVBoxLayout" name="detailLayout">
+        <property name="spacing"><number>8</number></property>
+        <item><layout class="QHBoxLayout" name="detailHead"><item><widget class="QLabel" name="detailLabel"><property name="text"><string>② 구간별 상세 스토리</string></property></widget></item><item><spacer name="detailHeadSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QLabel" name="detailCountLabel"><property name="text"><string>구간 수: -</string></property></widget></item></layout></item>
+        <item><widget class="QLabel" name="detailStatus"><property name="wordWrap"><bool>true</bool></property><property name="text"><string>설정한 구간 수로 전체 화수를 나누고, 전체 줄거리과 DB 설정을 바탕으로 각 구간의 상세 흐름을 만듭니다.</string></property></widget></item>
+        <item><widget class="QListWidget" name="detailList"><property name="minimumSize"><size><width>0</width><height>260</height></size></property></widget></item>
+        <item><layout class="QHBoxLayout" name="detailActionLayout"><item><widget class="QPushButton" name="generateBtn"><property name="text"><string>AI 구간별 스토리 생성</string></property></widget></item><item><widget class="QPushButton" name="regenerateSelectedBtn"><property name="text"><string>선택 구간 재생성</string></property></widget></item></layout></item>
+        <item><widget class="QPushButton" name="regenerateAllBtn"><property name="text"><string>전체 구간 재생성</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+     <item><widget class="QLabel" name="arrow2"><property name="text"><string>→</string></property></widget></item>
+     <item>
+      <widget class="QFrame" name="chapterCard">
+       <property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property>
+       <property name="minimumSize"><size><width>280</width><height>0</height></size></property>
+       <layout class="QVBoxLayout" name="chapterLayout">
+        <property name="spacing"><number>8</number></property>
+        <item><widget class="QLabel" name="chapterLabel"><property name="text"><string>③ 화별 스토리</string></property></widget></item>
+        <item><widget class="QLabel" name="chapterStatus"><property name="wordWrap"><bool>true</bool></property><property name="text"><string>선택한 구간을 1화, 2화, 3화처럼 개별 회차의 스토리로 구체화합니다.</string></property></widget></item>
+        <item><widget class="QLabel" name="selectedRangeLabel"><property name="text"><string>선택 구간: -</string></property></widget></item>
+        <item><widget class="QListWidget" name="chapterCombo"><property name="minimumSize"><size><width>0</width><height>260</height></size></property></widget></item>
+        <item><widget class="QPushButton" name="generateChapterBtn"><property name="text"><string>AI 화별 스토리 생성</string></property></widget></item>
+        <item><widget class="QPushButton" name="regenerateChapterBtn"><property name="text"><string>선택 화 재생성</string></property></widget></item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="detailEditCard">
+     <property name="frameShape"><enum>QFrame::Shape::StyledPanel</enum></property>
+     <layout class="QVBoxLayout" name="editLayout">
+      <property name="spacing"><number>8</number></property>
+      <item><layout class="QHBoxLayout" name="editHeader"><item><widget class="QLabel" name="detailTitle"><property name="text"><string>선택 항목 상세 편집</string></property></widget></item><item><spacer name="editSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer></item><item><widget class="QPushButton" name="saveBtn"><property name="text"><string>저장</string></property></widget></item></layout></item>
+      <item><widget class="QPlainTextEdit" name="detail"><property name="placeholderText"><string>선택한 구간 또는 화별 스토리의 내용을 확인·수정합니다.</string></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/><connections/>
+</ui>

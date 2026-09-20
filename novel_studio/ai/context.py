@@ -81,6 +81,7 @@ class ContextManager:
             b.append('[MASTER PLAN]\n' + plan[:9000])
         if mp:
             b.append('[MASTER PLOT]\n' + mp[:9000])
+        r = None
         if chapter:
             r = self.retrieval.retrieve(chapter, extra)
             p = r['plan']

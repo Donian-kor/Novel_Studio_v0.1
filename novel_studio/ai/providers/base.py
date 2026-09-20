@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import socket
 import threading
-import time
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
@@ -11,13 +10,24 @@ from contextlib import contextmanager
 from novel_studio.utils.cancellation import JobCancelled
 from novel_studio.utils.retry import NETWORK_RETRY_EXCEPTIONS, retry_stream_with_backoff, retry_with_backoff
 
-# 연결 단계(첫 바이트 대기) 슬라이스. 서버가 조용해도 이 간격마다
-# 취소 토큰을 확인하므로 정지 버튼이 1~2초 안에 먹는다.
-CONNECT_SLICE_TIMEOUT = 1.0
+# 서버의 기본 빠른 연결 테스트에만 사용한다.
+CONNECT_TIMEOUT = 1.0
 
-# urlopen에 timeout을 주지 않으면(None) 소켓이 무한 대기한다.
-# 정지 버튼의 abort-close가 1차 중단 수단이고, 이 기본값은 abandon 방지용 상한이다.
+# 취소는 별도 abort()로 처리하므로 스트리밍 read timeout을 두지 않는다.
+CANCEL_POLL_INTERVAL = 1.0
+
+# AI 추론 + 응답 대기를 허용하는 전체 요청 시간(초).
+# 이 값 동안 첫 토큰이 오지 않아도 정상적인 장기 추론으로 간주한다.
 DEFAULT_CHAT_TIMEOUT = 1800
+
+
+def _post_connect_timeout(sock, timeout):
+    """연결 후 소켓의 읽기 timeout을 설정한다. 짧은 값은 무제한으로 완화한다."""
+    try:
+        value = None if timeout is None or float(timeout) <= CONNECT_TIMEOUT else float(timeout)
+        sock.settimeout(value)
+    except Exception:
+        pass
 
 
 def _shutdown_underlying_socket(resp) -> None:
@@ -115,30 +125,42 @@ class AIProvider(ABC):
                     pass
 
     def _check_urlopen(self, req, timeout):
-        """연결+첫 바이트 대기를 취소 가능하게 만든다(1초 슬라이스 재시도)."""
-        if timeout is None:
+        """HTTP 연결과 첫 응답을 하나의 장기 timeout으로 처리한다.
+
+        ``urllib.request.urlopen(timeout=1)``은 TCP connect뿐 아니라 응답 헤더를
+        기다리는 동안에도 적용되므로, LM Studio가 긴 추론을 수행하면 첫 토큰 전에
+        timeout이 발생할 수 있다. AI 요청에서는 전달된 전체 timeout(기본 1800초)을
+        사용하고, 연결 후 소켓 read timeout은 별도로 설정하지 않는다.
+        """
+        if timeout is None or float(timeout) <= CONNECT_TIMEOUT:
             timeout = DEFAULT_CHAT_TIMEOUT
-        deadline = time.monotonic() + max(1.0, float(timeout))
-        last_error = None
-        while True:
+        if self._interrupted():
+            self.abort()
+            raise JobCancelled()
+        try:
+            # 서버가 꺼져 있으면 connection refused가 즉시 발생하고,
+            # 서버가 켜져 있으면 긴 추론/첫 토큰 대기까지 timeout을 보장한다.
+            return urllib.request.urlopen(req, timeout=float(timeout))
+        except (TimeoutError, socket.timeout) as e:
             if self._interrupted():
-                self.abort()
-                raise JobCancelled()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                if last_error is not None:
-                    raise last_error
-                raise TimeoutError('AI 서버 응답 시간 초과')
-            try:
-                return urllib.request.urlopen(
-                    req, timeout=min(CONNECT_SLICE_TIMEOUT, remaining))
-            except (TimeoutError, socket.timeout) as e:
-                last_error = e
-                continue
-            except OSError as e:
-                if self._interrupted():
-                    raise JobCancelled() from e
-                raise
+                raise JobCancelled() from e
+            raise
+        except OSError as e:
+            if self._interrupted():
+                raise JobCancelled() from e
+            raise
+
+    def _set_read_timeout(self, resp, timeout):
+        """응답 소켓의 읽기 타임아웃을 설정한다 (取消 폴링용)."""
+        try:
+            sock_timeout = getattr(resp, "fp", None)
+            raw = getattr(sock_timeout, "raw", None) if sock_timeout is not None else None
+            raw_sock = getattr(raw, "_sock", None) if raw is not None else None
+            target = raw_sock if raw_sock is not None else raw
+            if target is not None and hasattr(target, "settimeout"):
+                target.settimeout(timeout)
+        except Exception:
+            pass
 
     @contextmanager
     def _open_response(self, resp):
@@ -155,16 +177,21 @@ class AIProvider(ABC):
     def _read_json(self, resp):
         """응답 전체를 청크 단위로 읽되 매 청크마다 취소를 확인한다.
 
-        취소로 인해 응답이 닫혀 읽기가 실패했으면 ``JobCancelled``로 바꿔
+        취소로 인해 응답이 닫혀 읽기가 실패했으면 ``JobCancelled``로 바꾸어
         네트워크 오류로 오인한 재시도를 차단한다.
         """
         chunks = []
+        read1 = getattr(resp, "read1", None)
         while True:
             if self._interrupted():
                 self.abort()
                 raise JobCancelled()
             try:
-                chunk = resp.read(8192)
+                chunk = read1(8192) if callable(read1) else resp.read(8192)
+            except (TimeoutError, socket.timeout) as e:
+                if self._interrupted():
+                    raise JobCancelled() from e
+                continue
             except Exception as e:
                 if self._interrupted():
                     raise JobCancelled() from e
@@ -175,51 +202,26 @@ class AIProvider(ABC):
         return b"".join(chunks)
 
     def _readline_cancelable(self, resp):
-        """스트리밍 1줄을 읽되, 대기 중에도 취소/응답 닫힘을 감지한다.
+        """스트리밍 한 줄을 읽는다. 첫 토큰까지는 timeout 없이 기다린다.
 
-        플랫폼에 따라 abort-close만으로 블로킹 readline이 즉시 풀리지 않을 수
-        있어, 소켓 타임아웃을 1초 슬라이스로 걸고 매번 만료를 재시도한다.
-        이 동안 정지 버튼이 눌리면 ``JobCancelled``로 즉시 전환된다.
+        사용자가 정지하면 ``abort()``가 활성 응답 소켓을 shutdown/close 하여
+        블로킹 read를 깨운다. timed-out BufferedReader에 다시 readline()을
+        호출하는 기존 폴링 방식은 ``cannot read from timed out object``를 만들 수
+        있으므로 사용하지 않는다.
         """
-        sock_timeout = getattr(resp, "fp", None)
-        raw = getattr(sock_timeout, "raw", None) if sock_timeout is not None else None
-        raw_sock = getattr(raw, "_sock", None) if raw is not None else None
-        target = raw_sock if raw_sock is not None else raw
-        original_timeout = None
-        restore = False
-        if target is not None and hasattr(target, "gettimeout") and hasattr(target, "settimeout"):
-            try:
-                original_timeout = target.gettimeout()
-                if original_timeout is None or original_timeout > 1.0:
-                    target.settimeout(1.0)
-                    restore = True
-            except Exception:
-                restore = False
+        if self._interrupted():
+            self.abort()
+            raise JobCancelled()
         try:
-            while True:
-                if self._interrupted():
-                    self.abort()
-                    raise JobCancelled()
-                try:
-                    return resp.readline()
-                except (TimeoutError, socket.timeout, OSError) as e:
-                    # 타임아웃 만료: 정상 대기이므로 취소 여부만 보고 다시 읽기.
-                    # 단, abort로 소켓이 닫혀 발생한 OSError는 취소로 전환한다.
-                    if self._interrupted():
-                        raise JobCancelled() from e
-                    if isinstance(e, OSError) and not isinstance(e, TimeoutError) and not isinstance(e, socket.timeout):
-                        raise
-                    continue
-                except Exception as e:
-                    if self._interrupted():
-                        raise JobCancelled() from e
-                    raise
-        finally:
-            if restore:
-                try:
-                    target.settimeout(original_timeout)
-                except Exception:
-                    pass
+            return resp.readline()
+        except (TimeoutError, socket.timeout, OSError) as e:
+            if self._interrupted():
+                raise JobCancelled() from e
+            raise
+        except Exception as e:
+            if self._interrupted():
+                raise JobCancelled() from e
+            raise
 
     def _retry_config(self):
         return {

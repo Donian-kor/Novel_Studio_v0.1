@@ -1,69 +1,144 @@
 from __future__ import annotations
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QPlainTextEdit, QPushButton, QSplitter, QAbstractItemView
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QLabel, QListWidget, QPlainTextEdit, QPushButton
+from ._base import BaseView
 
-class StoryView(QWidget):
+
+class StoryView(BaseView):
+    """전체 줄거리 → 구간별 상세 → 화별 스토리의 3단계 작업 화면."""
     changed = Signal()
+
     def __init__(self, w):
-        super().__init__(w); self.w=w
-        root=QVBoxLayout(self); root.setContentsMargins(8,8,8,8); root.setSpacing(6)
-        title=QLabel("스토리"); title.setStyleSheet("font-size:18px;font-weight:700;"); root.addWidget(title)
-        top=QSplitter(Qt.Orientation.Horizontal); root.addWidget(top,0)
-        self.longList=QListWidget(); self.subList=QListWidget()
-        for lst in (self.longList,self.subList):
-            lst.setMinimumHeight(118); lst.setMaximumHeight(118); lst.setUniformItemSizes(True); lst.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerItem)
-        lb=QWidget(); ll=QVBoxLayout(lb); ll.setContentsMargins(0,0,0,0); ll.addWidget(QLabel("장기 스토리 구간")); ll.addWidget(self.longList)
-        sb=QWidget(); sl=QVBoxLayout(sb); sl.setContentsMargins(0,0,0,0); sl.addWidget(QLabel("세부 스토리 구간")); sl.addWidget(self.subList)
-        top.addWidget(lb); top.addWidget(sb); top.setStretchFactor(0,1); top.setStretchFactor(1,1)
-        bar=QHBoxLayout(); self.chapterLabel=QLabel("화별 스토리"); bar.addWidget(self.chapterLabel); self.chapterCombo=QListWidget(); self.chapterCombo.setMaximumHeight(74); self.chapterCombo.setMinimumWidth(260); self.chapterCombo.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff); bar.addWidget(self.chapterCombo,1)
-        self.generateChapterBtn=QPushButton("AI 화별 스토리 생성"); self.regenerateChapterBtn=QPushButton("선택 화 재생성"); bar.addWidget(self.generateChapterBtn); bar.addWidget(self.regenerateChapterBtn); root.addLayout(bar,0)
-        toolbar=QHBoxLayout(); self.generateBtn=QPushButton("AI 스토리 생성"); self.regenerateSelectedBtn=QPushButton("선택 구간 재생성"); self.regenerateAllBtn=QPushButton("전체 다시 생성"); self.saveBtn=QPushButton("저장"); toolbar.addWidget(self.generateBtn); toolbar.addWidget(self.regenerateSelectedBtn); toolbar.addWidget(self.regenerateAllBtn); toolbar.addStretch(); toolbar.addWidget(self.saveBtn); root.addLayout(toolbar,0)
-        self.detail=QPlainTextEdit(); self.detail.setPlaceholderText("선택한 스토리의 내용을 확인·수정합니다."); root.addWidget(self.detail,1)
-        self.longList.currentRowChanged.connect(self._long_changed); self.subList.currentRowChanged.connect(self._sub_changed); self.chapterCombo.currentRowChanged.connect(self._chapter_changed); self.detail.textChanged.connect(lambda: self.saveBtn.setEnabled(True)); self.saveBtn.clicked.connect(self.save_detail)
-        self._long_rows=[]; self._sub_rows=[]; self._chapter_rows=[]; self._selected_kind='long'; self._loading=False; self.saveBtn.setEnabled(False)
+        super().__init__(w)
+        self.mount('story.ui')
+        self.w = w
+        self.detailList = self.ui.findChild(QListWidget, 'detailList')
+        self.chapterCombo = self.ui.findChild(QListWidget, 'chapterCombo')
+        self.chapterLabel = self.ui.findChild(QLabel, 'chapterLabel')
+        self.selectedRangeLabel = self.ui.findChild(QLabel, 'selectedRangeLabel')
+        self.detailCountLabel = self.ui.findChild(QLabel, 'detailCountLabel')
+        self.masterPlotPreview = self.ui.findChild(QPlainTextEdit, 'masterPlotPreview')
+        self.generateChapterBtn = self.ui.findChild(QPushButton, 'generateChapterBtn')
+        self.regenerateChapterBtn = self.ui.findChild(QPushButton, 'regenerateChapterBtn')
+        self.generateBtn = self.ui.findChild(QPushButton, 'generateBtn')
+        self.regenerateSelectedBtn = self.ui.findChild(QPushButton, 'regenerateSelectedBtn')
+        self.regenerateAllBtn = self.ui.findChild(QPushButton, 'regenerateAllBtn')
+        self.saveBtn = self.ui.findChild(QPushButton, 'saveBtn')
+        self.detail = self.ui.findChild(QPlainTextEdit, 'detail')
+
+        for widget in (self.detailList, self.chapterCombo):
+            if widget:
+                widget.setUniformItemSizes(True)
+        self.detailList.currentRowChanged.connect(self._detail_changed)
+        self.chapterCombo.currentRowChanged.connect(self._chapter_changed)
+        self.detail.textChanged.connect(lambda: self.saveBtn.setEnabled(True))
+        self.saveBtn.clicked.connect(self.save_detail)
+        self._detail_rows = []
+        self._chapter_rows = []
+        self._selected_kind = 'detail'
+        self._loading = False
+        self.saveBtn.setEnabled(False)
 
     @staticmethod
-    def _range_label(row): return f"{int(row['start_chapter']):03d}~{int(row['end_chapter']):03d}화 | {row['status'] or '미작성'}"
+    def _range_label(row):
+        return f"{int(row['start_chapter']):03d}~{int(row['end_chapter']):03d}화 | {row['status'] or '미작성'}"
+
     def refresh(self):
-        long_current=max(0,self.longList.currentRow()); self._long_rows=self.w.db.sections(); self.longList.blockSignals(True); self.longList.clear(); self.longList.addItems([self._range_label(r) for r in self._long_rows]);
-        if self._long_rows: self.longList.setCurrentRow(min(long_current,len(self._long_rows)-1))
-        self.longList.blockSignals(False); self._load_subrows(self.subList.currentRow()); self.saveBtn.setEnabled(False)
-    def _selected_long(self):
-        i=self.longList.currentRow(); return self._long_rows[i] if 0<=i<len(self._long_rows) else None
-    def _load_subrows(self, keep=-1):
-        r=self._selected_long(); self._sub_rows=self.w.db.story_subsections(int(r['start_chapter']),int(r['end_chapter'])) if r else []
-        self.subList.blockSignals(True); self.subList.clear(); self.subList.addItems([self._range_label(x) for x in self._sub_rows]);
-        if self._sub_rows: self.subList.setCurrentRow(max(0,min(keep if keep>=0 else 0,len(self._sub_rows)-1)))
-        self.subList.blockSignals(False); self._load_chapter_rows(); self._show_selected()
+        master = (self.w.db.get_meta('master_plot', '') or '').strip()
+        self.masterPlotPreview.setPlainText(master)
+        ranges = self.w.plot.detail_ranges()
+        current = self.detailList.currentRow()
+        self._detail_rows = []
+        by_key = {(int(r['start_chapter']), int(r['end_chapter'])): r for r in self.w.db.sections()}
+        for s, e in ranges:
+            row = by_key.get((s, e))
+            if row is None:
+                row = {
+                    'start_chapter': s, 'end_chapter': e, 'status': '미작성',
+                    'content': '', 'updated_at': None,
+                }
+            self._detail_rows.append(row)
+        self.detailList.blockSignals(True)
+        self.detailList.clear()
+        self.detailList.addItems([self._range_label(r) for r in self._detail_rows])
+        if self._detail_rows:
+            self.detailList.setCurrentRow(max(0, min(current if current >= 0 else 0, len(self._detail_rows) - 1)))
+        else:
+            self.detailList.setCurrentRow(-1)
+        self.detailList.blockSignals(False)
+        self.detailCountLabel.setText(f'구간 수: {len(self._detail_rows)}')
+        self._load_chapter_rows()
+        self._show_selected()
+        self.saveBtn.setEnabled(False)
+
+    def _selected_detail(self):
+        i = self.detailList.currentRow()
+        return self._detail_rows[i] if 0 <= i < len(self._detail_rows) else None
+
     def _load_chapter_rows(self):
-        sub=self._selected_sub(); long=self._selected_long();
-        if sub: self._chapter_rows=self.w.db.chapter_stories_in_range(int(sub['start_chapter']), int(sub['end_chapter']))
-        elif long: self._chapter_rows=self.w.db.chapter_stories_in_range(int(long['start_chapter']), int(long['end_chapter']))
-        else: self._chapter_rows=[]
-        self.chapterCombo.blockSignals(True); self.chapterCombo.clear(); self.chapterCombo.addItems([f"{int(x['chapter_number']):03d}화 | {x['status'] or '초안'} | {x['title'] or ''}" for x in self._chapter_rows]); self.chapterCombo.blockSignals(False)
-        self.chapterCombo.setCurrentRow(0 if self._chapter_rows else -1)
-    def _selected_sub(self):
-        i=self.subList.currentRow(); return self._sub_rows[i] if 0<=i<len(self._sub_rows) else None
+        detail = self._selected_detail()
+        if detail:
+            start, end = int(detail['start_chapter']), int(detail['end_chapter'])
+            self._chapter_rows = self.w.db.chapter_stories_in_range(start, end)
+            self.selectedRangeLabel.setText(f'선택 구간: {start}~{end}화')
+        else:
+            self._chapter_rows = []
+            self.selectedRangeLabel.setText('선택 구간: -')
+        self.chapterCombo.blockSignals(True)
+        self.chapterCombo.clear()
+        self.chapterCombo.addItems([
+            f"{int(x['chapter_number']):03d}화 | {x['status'] or '초안'} | {x['title'] or ''}"
+            for x in self._chapter_rows
+        ])
+        if self._chapter_rows:
+            self.chapterCombo.setCurrentRow(0)
+        else:
+            self.chapterCombo.setCurrentRow(-1)
+        self.chapterCombo.blockSignals(False)
+
     def _selected_chapter(self):
-        i=self.chapterCombo.currentRow(); return self._chapter_rows[i] if 0<=i<len(self._chapter_rows) else None
-    def _long_changed(self,_): self._selected_kind='long'; self._load_subrows(0)
-    def _sub_changed(self,_): self._selected_kind='sub'; self._load_chapter_rows(); self._show_selected()
-    def _chapter_changed(self,_): self._selected_kind='chapter'; self._show_selected()
+        i = self.chapterCombo.currentRow()
+        return self._chapter_rows[i] if 0 <= i < len(self._chapter_rows) else None
+
+    def _detail_changed(self, _):
+        self._selected_kind = 'detail'
+        self._load_chapter_rows()
+        self._show_selected()
+
+    def _chapter_changed(self, _):
+        self._selected_kind = 'chapter'
+        self._show_selected()
+
     def _show_selected(self):
-        row=None
-        if self._selected_kind=='chapter': row=self._selected_chapter()
-        elif self._selected_kind=='sub': row=self._selected_sub()
-        else: row=self._selected_long()
-        self._loading=True; self.detail.blockSignals(True); self.detail.setPlainText((row['content'] if row else '') or ''); self.detail.blockSignals(False); self._loading=False; self.saveBtn.setEnabled(row is not None)
+        row = self._selected_chapter() if self._selected_kind == 'chapter' else self._selected_detail()
+        self._loading = True
+        self.detail.blockSignals(True)
+        self.detail.setPlainText((row['content'] if row else '') or '')
+        self.detail.blockSignals(False)
+        self._loading = False
+        self.saveBtn.setEnabled(row is not None)
+
     def selected(self):
-        if self._selected_kind=='chapter' and self._selected_chapter(): return ('chapter',self._selected_chapter())
-        if self._selected_kind=='sub' and self._selected_sub(): return ('sub',self._selected_sub())
-        row=self._selected_long(); return ('long',row) if row else (None,None)
+        if self._selected_kind == 'chapter' and self._selected_chapter():
+            return 'chapter', self._selected_chapter()
+        row = self._selected_detail()
+        return ('detail', row) if row else (None, None)
+
     def save_detail(self):
-        kind,row=self.selected();
-        if not row:return False
-        content=self.detail.toPlainText()
-        if kind=='chapter': self.w.db.save_chapter_story(row['chapter_number'],row['long_start'],row['long_end'],row['sub_start'],row['sub_end'],row['title'],content,row['status'] or '초안')
-        elif kind=='sub': self.w.db.save_story_subsection(row['parent_start'],row['parent_end'],row['start_chapter'],row['end_chapter'],row['title'],content,row['status'] or '초안')
-        else: self.w.db.save_section(row['start_chapter'],row['end_chapter'],row['status'] or '초안',content)
-        self.refresh(); self.saveBtn.setEnabled(False); return True
+        kind, row = self.selected()
+        if not row:
+            return False
+        content = self.detail.toPlainText()
+        if kind == 'chapter':
+            self.w.db.save_chapter_story(
+                row['chapter_number'], row['long_start'], row['long_end'],
+                row['sub_start'], row['sub_end'], row['title'], content,
+                row['status'] or '초안'
+            )
+        else:
+            self.w.db.save_section(
+                row['start_chapter'], row['end_chapter'], row['status'] or '초안', content
+            )
+        self.refresh()
+        self.saveBtn.setEnabled(False)
+        return True

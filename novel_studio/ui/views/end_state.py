@@ -1,28 +1,23 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QPlainTextEdit, QPushButton, QLabel, QSplitter
+from ._base import BaseView
+from PySide6.QtWidgets import QListWidget, QPlainTextEdit, QPushButton, QSplitter
 
 
-class EndStateView(QWidget):
-    """화 종료 상태를 확인하고 필요할 때만 AI로 생성한다."""
+class EndStateView(BaseView):
+    """연속성 기록을 확인하고 필요할 때만 AI로 생성한다."""
     def __init__(self, w):
-        super().__init__()
+        super().__init__(w)
+        self.mount('end_state.ui')
         self.w = w
-        root = QVBoxLayout(self)
-        root.addWidget(QLabel("화 종료 상태"))
-        split = QSplitter()
-        self.chapterList = QListWidget()
-        self.chapterList.setMaximumWidth(320)
-        self.edit = QPlainTextEdit()
-        self.edit.setPlaceholderText("직전 화까지 실제로 확정된 사건·상태를 기록합니다.")
-        split.addWidget(self.chapterList); split.addWidget(self.edit); split.setSizes([280, 1100])
-        root.addWidget(split, 1)
-        bar = QHBoxLayout()
-        self.generateBtn = QPushButton("선택 화 종료 상태 생성")
-        self.auditBtn = QPushButton("장편 정밀 연속성 검사")
-        self.saveBtn = QPushButton("수정 저장")
-        bar.addWidget(self.generateBtn); bar.addWidget(self.auditBtn); bar.addStretch(); bar.addWidget(self.saveBtn)
-        root.addLayout(bar)
+        self.chapterList = self.ui.findChild(QListWidget, 'chapterList')
+        self.edit = self.ui.findChild(QPlainTextEdit, 'edit')
+        self.generateBtn = self.ui.findChild(QPushButton, 'generateBtn')
+        self.auditBtn = self.ui.findChild(QPushButton, 'auditBtn')
+        self.saveBtn = self.ui.findChild(QPushButton, 'saveBtn')
+        self.stateSplitter = self.ui.findChild(QSplitter, 'stateSplitter')
+        if self.stateSplitter:
+            self.stateSplitter.setSizes([280, 1100])
         self.chapterList.currentRowChanged.connect(self.show_selected)
         self.saveBtn.clicked.connect(self.save_selected)
         self._rows = []

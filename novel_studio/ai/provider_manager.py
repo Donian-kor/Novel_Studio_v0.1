@@ -79,6 +79,20 @@ class ProviderManager:
             {"base_url": base_url, "model": model, "api_key": api_key},
         )
 
+    def probe(self, provider_id: str | None = None):
+        """연결 자동 확인용 프로바이더를 만든다.
+
+        ``_build``가 등록하는 ``_active_provider``(정지 버튼의 abort 대상)를
+        프로브 인스턴스로 덮어쓰지 않도록 즉시 복원한다. 그렇지 않으면 연결
+        확인이 진행 중인 AI 작업의 정지(abort) 대상을 바꿔버릴 수 있다.
+        """
+        pid = provider_id or self.settings.data["active_provider"]
+        previous = self._active_provider
+        provider = self._build(pid, self.config(pid))
+        if self._active_provider is provider:
+            self._active_provider = previous
+        return provider
+
     def provider(self, provider_id: str | None = None):
         pid = provider_id or self.settings.data["active_provider"]
         return self._build(pid, self.config(pid))

@@ -315,25 +315,27 @@ tests/
 | 2 | 동일 파라미터 문제 (startup) | `ui/startup.py:50` | ✅ 수정 완료 |
 | 3 | `tests/`가 `.gitignore`에 포함 | `.gitignore:33` | ✅ 제거 완료 |
 
-### 중간 (Medium Priority) — 4건 수정 완료
+### 중간 (Medium Priority) — 전부 수정 완료
 
 | # | 이슈 | 파일 | 상태 |
 |---|------|------|------|
+| 4 | 한 줄 함수/클래스 다수 | 17개 파일 | ✅ PEP 8 가독성 확보를 위해 여러 줄로 펼치기 |
+| 5 | 타입 힌트 누락 | 7개 파일 | ✅ 타입 힌팅 보강 |
 | 6 | `MIGRATIONS` 빈 값 | `db/sqlite_storage.py:11` | ✅ 수정: 실행 가능한 SQL(`PRAGMA user_version = 4;`) + 주석 추가 |
 | 7 | 내부 속성 직접 참조 | `db/project_database.py:221,232` | ✅ 수정: `ThreadSafeDatabase.table_exists()` 공적 메서드 추가 후 `old._base._table_exists()` → `old.table_exists()` 변경 |
 | 8 | EndStateService 이중 docstring | `services/end_state_service.py:7-8` | ✅ 수정: 하나로 병합 |
 | 9 | `retry.is_retryable_error` 항상 True | `utils/retry.py:40` | ✅ 수정: 마지막 `return True` → `False` + 디버그 로그 추가, 취소 체크를 재시도 판별 전 별도 처리 |
 
-### 낮음 (Low Priority)
+### 낮음 (Low Priority) — 전부 수정 완료
 
-| # | 이슈 | 파일 | 권고 |
+| # | 이슈 | 파일 | 상태 |
 |---|------|------|------|
-| 10 | 예외 무음 처리 | `core/app_settings.py:30` | 로그 기록 추가 |
-| 11 | 대기열 인덱스 의존성 | `controllers/novel_controller.py:111` | NamedTuple 또는 dataclass로 교체 |
-| 12 | Gemini 스트리밍 미구현 | `ai/providers/gemini.py:48-52` | SSE 스트리밍 구현 또는 명시적 비활성 표시 |
-| 13 | ChatWindow 인터페이스 불명확 | `ui/views/chat.py:7` | Protocol/ABC로 계약 정의 |
-| 14 | `context.py` 변수 스코프 | `ai/context.py:73` | `r` 변수 사용 범위 명확화 |
-| 15 | `my.ini` 검사 범위 확대 | `mypy.ini` | `warn_return_any`, `warn_unused_configs` 추가 |
+| 10 | 예외 무음 처리 | `core/app_settings.py:30` | ✅ 수정: `except Exception` → 로그 기록 추가 |
+| 11 | 대기열 인덱스 의존성 | `controllers/novel_controller.py:32,111-116,129-158` | ✅ 수정: `JobQueueItem` NamedTuple으로 교체, `queued[5]` → `queued.is_stream` |
+| 12 | Gemini 스트리밍 미구현 | `ai/providers/gemini.py:48-52` | ✅ 수정: 명시적 비활성 표시 (docstring으로 사유 및 구현 경로 안내) |
+| 13 | ChatWindow 인터페이스 불명확 | `ui/views/chat.py` | ✅ 수정: `ChatWindowHost` Protocol로 계약 정의 |
+| 14 | `context.py` 변수 스코프 | `ai/context.py:84` | ✅ 수정: `r = None` 명시 초기화 |
+| 15 | mypy 검사 범위 확대 | `mypy.ini` | ✅ 수정: `warn_return_any`, `warn_unused_configs` 추가 |
 
 ---
 

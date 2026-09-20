@@ -3,8 +3,10 @@ from novel_studio.utils.cancellation import JobCancelled
 
 
 class PlotManager:
-    def __init__(self, db, ai, project):
-        self.db, self.ai, self.project = db, ai, project
+    def __init__(self, db: object, ai: object, project: object):
+        self.db = db
+        self.ai = ai
+        self.project = project
 
     def generate_master(self):
         c = self.db.get_contract()
@@ -15,28 +17,50 @@ class PlotManager:
         self.db.set_meta('master_plot', out)
         return out
 
-    def ranges(self):
-        size = int(self.project.settings.get('section_size', 10))
-        total = int(self.project.settings['target_chapters'])
-        return [(s, min(s + size - 1, total)) for s in range(1, total + 1, size)]
+    def detail_ranges(self):
+        """마스터 플롯을 실제 작업 구간으로 균등 분할한다.
 
+        설정값은 '구간 수'이며, 총 화수를 해당 수만큼 균등하게 나눈다.
+        예: 500화 / 10구간 -> 1~50, 51~100, ... 451~500.
+        나머지가 생기면 앞쪽 구간부터 1화씩 배분한다.
+        """
+        total = max(1, int(self.project.settings.get('target_chapters', 1)))
+        count = max(1, min(int(self.project.settings.get('detail_section_count', 10)), total))
+        base, remainder = divmod(total, count)
+        ranges = []
+        start = 1
+        for i in range(count):
+            size = base + (1 if i < remainder else 0)
+            end = start + size - 1
+            ranges.append((start, end))
+            start = end + 1
+        return ranges
+
+    # 레거시 코드/데이터 호환용. 앞으로는 detail_ranges()만 사용한다.
     def long_ranges(self):
-        size = max(1, int(self.project.settings.get('long_story_size', 50)))
+        return self.detail_ranges()
+
+    def ranges(self):
+        size = max(1, int(self.project.settings.get('section_size', 10)))
         total = int(self.project.settings['target_chapters'])
         return [(s, min(s + size - 1, total)) for s in range(1, total + 1, size)]
 
     def sub_ranges(self, start, end):
-        size = max(1, int(self.project.settings.get('sub_story_size', 10)))
-        return [(s, min(s + size - 1, end)) for s in range(int(start), int(end) + 1, size)]
+        """구형 API 호환용. 새 구조에서는 별도 세부 하위 구간을 만들지 않는다."""
+        return [(int(start), int(end))]
 
-    def generate_story_section(self, s, e, previous=''):
+    def generate_detail_section(self, s, e, previous=''):
         c = self.db.get_contract()
         return self.ai.generate(
-            section_plan(self.db.get_meta('master_plot', ''), c['content'] if c else '', s, e, previous),
-            temperature=.60, max_tokens=12000
+            section_plan(self.db.get_meta('master_plot', ''), c['content'] if c else '', s, e, previous, int(self.project.settings.get('detail_story_chars', 500))),
+            temperature=.60, max_tokens=max(2500, min(16000, int(self.project.settings.get('detail_story_chars', 500)) * 4))
         )
 
+    # 기존 호출부 호환용
+    generate_story_section = generate_detail_section
+
     def generate_substory_section(self, s, e, parent_content='', previous=''):
+        # 과거 DB/API 호환. 새 UI에서는 사용하지 않는다.
         c = self.db.get_contract()
         context = (parent_content or '')[:12000]
         if previous:
@@ -46,13 +70,17 @@ class PlotManager:
             temperature=.55, max_tokens=8000
         )
 
-
     def generate_chapter_stories(self, start, end, sub_content="", previous=""):
         contract = self.db.get_contract()
-        raw = self.ai.generate(chapter_stories(sub_content, contract['content'] if contract else '', int(start), int(end), previous), temperature=.58, max_tokens=12000)
+        raw = self.ai.generate(
+            chapter_stories(sub_content, contract['content'] if contract else '', int(start), int(end), previous, int(self.project.settings.get('chapter_story_chars', 500))),
+            temperature=.58, max_tokens=max(3000, min(20000, int(self.project.settings.get('chapter_story_chars', 500)) * max(1, int(end) - int(start) + 1) * 3))
+        )
         return raw
+
     def ranges_by_size(self, size=25):
-        total = int(self.project.settings['target_chapters']); size = max(1, int(size))
+        total = int(self.project.settings['target_chapters'])
+        size = max(1, int(size))
         return [(s, min(s + size - 1, total)) for s in range(1, total + 1, size)]
 
     def audit_long_form(self, size=50, progress=None, cancelled_check=None):

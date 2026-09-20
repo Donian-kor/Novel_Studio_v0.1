@@ -39,7 +39,6 @@ def main() -> int:
     from novel_studio.ui.main_window import MainWindow
     window = MainWindow(root)
     window.show()
-    window.open_ai_chat()
     return app.exec()
 
 

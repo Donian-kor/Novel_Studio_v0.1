@@ -1,7 +1,10 @@
 from __future__ import annotations
 from pathlib import Path
 import json
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 DEFAULT = {
     "active_provider": "lmstudio",
@@ -27,8 +30,8 @@ class AppSettings:
             try:
                 saved = json.loads(self.path.read_text(encoding="utf-8"))
                 self._merge(self.data, saved)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("설정 파일 로드 실패, 기본값 사용: %s", exc)
         self.save()
 
     def _merge(self, base: dict[str, Any], update: dict[str, Any]) -> None:

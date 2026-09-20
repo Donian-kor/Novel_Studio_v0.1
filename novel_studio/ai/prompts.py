@@ -1,5 +1,13 @@
-SECTIONS=['세계관','세력','장소','인물','시간축','복선','핵심 사건']
-SPEC={'세계관':'세계의 층위, 역사, 법칙, 문화, 종족, 공간, 시간, 인과. 장르의 특성에 맞는 세계 법칙 중심.','세력':'목적, 지도자, 조직, 자원, 영역, 동맹/적대, 주요 인물, 장기 변화.','장소':'위치, 환경, 특징, 위험, 역사, 관련 세력/인물/사건.','인물':'외형, 성격, 말투, 가치관, 목표, 욕망, 약점, 능력, 비밀, 성장선, 최종 상태.','시간축':'화수와 세계관 시간을 연결하고 시간 도약 및 주요 사건 시점을 설계.','복선':'장기 복선의 첫 암시, 강화, 부분 공개, 진실 공개, 최종 회수.','핵심 사건':'초중후반 주요 사건과 인과관계, 전환점, 최종 사건.'}
+SECTIONS = ['세계관', '세력', '장소', '인물', '시간축', '복선', '핵심 사건']
+SPEC = {
+    '세계관': '세계의 층위, 역사, 법칙, 문화, 종족, 공간, 시간, 인과. 장르의 특성에 맞는 세계 법칙 중심.',
+    '세력': '목적, 지도자, 조직, 자원, 영역, 동맹/적대, 주요 인물, 장기 변화.',
+    '장소': '위치, 환경, 특징, 위험, 역사, 관련 세력/인물/사건.',
+    '인물': '외형, 성격, 말투, 가치관, 목표, 욕망, 약점, 능력, 비밀, 성장선, 최종 상태.',
+    '시간축': '화수와 세계관 시간을 연결하고 시간 도약 및 주요 사건 시점을 설계.',
+    '복선': '장기 복선의 첫 암시, 강화, 부분 공개, 진실 공개, 최종 회수.',
+    '핵심 사건': '초중후반 주요 사건과 인과관계, 전환점, 최종 사건.',
+}
 
 # 장르 프리셋: 아이디어/기획 프롬프트에 장르 특화 지침을 주입한다.
 GENRES = ['선협', '무협', '판타지', '로맨스', '현대', '스릴러', '호러', 'SF', '역사', '게임', '직접 입력']
@@ -16,20 +24,41 @@ GENRE_GUIDE = {
     '게임': '시스템창·레벨업·헌터물·회귀 중심.',
 }
 
-def _genre_line(meta):
+def _genre_line(meta: dict) -> str:
+    """장르·분위기 설정을 아이디어/기획 프롬프트용 한 줄로 만든다."""
     genre = meta.get('genre', '선협') or '선협'
     mood = meta.get('mood', '') or ''
     guide = GENRE_GUIDE.get(genre, '')
     extra = f' 장르 특성: {guide}' if guide else ''
     return f'장르:{genre}{extra} 분위기:{mood}'
 
-def idea(meta,previous): return f"한국 장편 웹소설의 새로운 아이디어 시안 1개만 만들어라. {_genre_line(meta)}. 기존 시안과 겹치지 않게. 최근 시안:{previous}. 정확히 3줄, 제목/번호/해설 없이."
-def master(seed,meta): return f"""다음 아이디어를 {meta['target_chapters']}화 장편으로 기획하라. 화당 목표:{meta['chapter_chars']}자. {_genre_line(meta)}\n아이디어:{seed}\n[작품 개요][핵심 주제][주인공][세계관 개요][주요 세력][주요 장소][주요 인물][인물 성장][핵심 사건][시간축 방향][주요 복선][전체 이야기 구조][예상 결말]."""
-def section(name,master_text,target,existing=''): return f"[{name}]을 장편 작품용 상세 설정으로 작성하라. 목표 {target}화. 마스터:{master_text}\n기존 초안:{existing}\n필수:{SPEC[name]} 기존 설정과 충돌하면 임의로 바꾸지 말고 보완하라."
-def contract(master_text,sections,target): return f"{target}화 작품의 장기 불변 기준인 PLAN CONTRACT를 추출하라. 마스터:{master_text}\n세부:{sections}\n[주인공 핵심][세계 핵심 법칙][핵심 비밀][핵심 유물/장치][최종 목표][최종 대립][최종 결말][불변 규칙][절대 변경 금지] 형식."
-def master_plot(master_text,contract,target): return f"{target}화 전체 마스터 플롯을 5개 내외의 큰 부로 설계하라. 마스터:{master_text}\nCONTRACT:{contract}\n각 부에 화수 범위, 목표, 성장, 갈등, 핵심 사건, 복선 진행, 반전, 결말, 다음 부 연결. 개별 화 상세는 만들지 않는다."
-def section_plan(master_plot_text,contract,start,end,previous): return f"{start}~{end}화 스토리 구간을 하나의 연결된 흐름으로 설계하라. 마스터:{master_plot_text}\nCONTRACT:{contract}\n직전 상태:{previous}\n[구간 목표][구간 시작 상태][핵심 사건 흐름][주요 인물 변화][세계 변화][복선 진행][구간 반전][구간 종료 상태][다음 구간 연결점]."
-def chapter_stories(section_text,contract,start,end,state):
+def idea(meta: dict, previous: str) -> str:
+    return f"한국 장편 웹소설의 새로운 아이디어 시안 1개만 만들어라. {_genre_line(meta)}. 기존 시안과 겹치지 않게. 최근 시안:{previous}. 정확히 3줄, 제목/번호/해설 없이."
+
+
+def master(seed: str, meta: dict) -> str:
+    return f"""다음 아이디어를 {meta['target_chapters']}화 장편으로 기획하라. 화당 목표:{meta['chapter_chars']}자. {_genre_line(meta)}
+아이디어:{seed}
+[작품 개요][핵심 주제][주인공][세계관 개요][주요 세력][주요 장소][주요 인물][인물 성장][핵심 사건][시간축 방향][주요 복선][전체 이야기 구조][예상 결말]."""
+
+
+def section(name: str, master_text: str, target: int, existing: str = '') -> str:
+    return f"[{name}]을 장편 작품용 상세 설정으로 작성하라. 목표 {target}화. 마스터:{master_text}\n기존 초안:{existing}\n필수:{SPEC[name]} 기존 설정과 충돌하면 임의로 바꾸지 말고 보완하라."
+
+
+def contract(master_text: str, sections: str, target: int) -> str:
+    return f"{target}화 작품의 장기 불변 기준인 PLAN CONTRACT를 추출하라. 마스터:{master_text}\n세부:{sections}\n[주인공 핵심][세계 핵심 법칙][핵심 비밀][핵심 유물/장치][최종 목표][최종 대립][최종 결말][불변 규칙][절대 변경 금지] 형식."
+
+
+def master_plot(master_text: str, contract: str, target: int) -> str:
+    return f"{target}화 전체 마스터 플롯을 5개 내외의 큰 부로 설계하라. 마스터:{master_text}\nCONTRACT:{contract}\n각 부에 화수 범위, 목표, 성장, 갈등, 핵심 사건, 복선 진행, 반전, 결말, 다음 부 연결. 개별 화 상세는 만들지 않는다."
+
+
+def section_plan(master_plot_text: str, contract: str, start: int, end: int, previous: str, target_chars: int = 500) -> str:
+    return f"{start}~{end}화의 구간별 상세 스토리를 하나의 연결된 흐름으로 압축해 설계하라. 목표 분량은 약 {int(target_chars)}자이다. 문장을 글자수에서 강제로 자르지 말고 자연스럽게 마무리하라. 목표를 넘길 것 같으면 세부 묘사보다 핵심 사건과 변화에 우선순위를 둬라. 마스터:{master_plot_text}\nCONTRACT:{contract}\n직전 구간 연결 정보:{previous}\n반드시 포함: 구간의 시작 상황, 핵심 사건 흐름, 주요 인물 변화, 세계/관계 변화, 복선 진행, 가장 중요한 전환점, 구간의 끝과 다음 구간 연결. 불필요한 설명·메타 발언·목록식 장황한 서술은 피하고 하나의 완결된 요약으로 출력하라."
+
+
+def chapter_stories(section_text: str, contract: str, start: int, end: int, state: str, target_chars: int = 500):
     return f"""{start}~{end}화의 개별 플롯을 만들어라.
 구간:{section_text}
 CONTRACT:{contract}
@@ -41,31 +70,29 @@ CONTRACT:{contract}
 - 둘째 줄은 반드시 `제목: 제목내용` 형식이다.
 - 화 사이에는 빈 줄을 둔다.
 - 설명/서론/마무리/코드블록을 출력하지 않는다.
-- 각 화마다 [목표][시작 상황][핵심 사건][갈등][전환점][인물 변화][세계관 정보][복선][복선 회수][엔딩][다음 화 연결]을 빠짐없이 작성한다.
+- 각 화의 본문 내용은 약 {int(target_chars)}자 분량을 목표로 한다. 글자수를 넘었다고 문장 중간에서 끊지 말고 자연스럽게 한 화의 줄거리를 마무리한다. 목표보다 길어질 경우 세부 묘사와 반복을 줄이고 핵심 사건 중심으로 압축한다. 각 화마다 [목표][시작 상황][핵심 사건][갈등][전환점][인물 변화][세계관 정보][복선][복선 회수][엔딩][다음 화 연결]을 핵심만 담아 작성한다.
 
 첫 헤더 예시: ### 제{start}화
 제목: ..."""
-def write(ctx,ch,target,tol): return f"제{ch}화 본문을 작성하라. 목표 {target}자, 허용 {target-tol}~{target+tol}자. 대사는 위아래 한 줄씩 띄운다. 본문만 출력한다.\n{ctx}"
-
-def state(ch,text): return f"제{ch}화 원고에서 실제로 변한 상태만 추출하라. 추측 금지. [주인공 상태][인물 상태 변화][경지][위치][시간][소지품][관계][신규 복선][진행 복선][회수 복선][미해결 사건]\n{text}"
 
 
-def chat_system(ctx): return f"당신은 작품 전용 AI 비서다. 확정된 작품 데이터와 검색 근거를 우선한다. 자료에 없으면 확인 불가라고 답한다.\n{ctx}"
-def entity_extract(ch,text):
-    """화별 '상태가 변한' 인물/세력/장소만 원장에 기록하도록 추출을 요청한다."""
-    return f"""제{ch}화 원고를 읽고 상태가 실제로 변한 인물/세력/장소만 추출하라.
-추측 금지. 변화가 없으면 빈 배열 []만 출력한다.
-반드시 JSON 배열만 출력한다. 마크다운, 설명, 코드블록 금지.
-형식 예시: [{{"kind":"인물","name":"이름","change":"이번 화에서의 상태 변화 요약"}}]
-kind는 인물/세력/장소 중 하나다. name은 작품 설정 DB의 기존 명칭과 일치시킨다.
-
-[제{ch}화 원고]
-{text[:12000]}
-"""
+def write(ctx: str, ch: int, target: int, tol: int) -> str:
+    return f"제{ch}화 본문을 작성하라. 목표 {target}자, 허용 {target-tol}~{target+tol}자. 대사는 위아래 한 줄씩 띄운다. 본문만 출력한다.\n{ctx}"
 
 
-def continuity(ch,text,ctx): return f"제{ch}화 원고를 아래 확정 설정/기억과 대조하여 연속성 오류만 보고하라. 추측 금지, 근거 없는 지적 금지. [모순/오류][누락 확인 필요][특이사항 없음 여부]\n[참고 자료]\n{ctx}\n\n[검사 대상 원고]\n{text}"
-def entity_extra(kind, name, context_text):
+def state(ch: int, text: str) -> str:
+    return f"제{ch}화 원고에서 실제로 변한 상태만 추출하라. 추측 금지. [주인공 상태][인물 상태 변화][경지][위치][시간][소지품][관계][신규 복선][진행 복선][회수 복선][미해결 사건]\n{text}"
+
+
+def chat_system(ctx: str) -> str:
+    return f"당신은 작품 전용 AI 비서다. 확정된 작품 데이터와 검색 근거를 우선한다. 자료에 없으면 확인 불가라고 답한다.\n{ctx}"
+
+
+def continuity(ch: int, text: str, ctx) -> str:
+    return f"제{ch}화 원고를 아래 확정 설정/기억과 대조하여 연속성 오류만 보고하라. 추측 금지, 근거 없는 지적 금지. [모순/오류][누락 확인 필요][특이사항 없음 여부]\n[참고 자료]\n{ctx}\n\n[검사 대상 원고]\n{text}"
+
+
+def entity_extra(kind: str, name: str, context_text: str) -> str:
     """설정 DB 단일 항목 AI 생성용 프롬프트."""
     guide = {
         '인물': '이름/역할(주인공·서브·조연)/외형/성격/말투/목표/약점/비밀/성장선 순서로 작성.',
@@ -80,7 +107,7 @@ def entity_extra(kind, name, context_text):
 
 
 
-def entity_catalog_prompt(kind, master_plan, target_chapters=500):
+def entity_catalog_prompt(kind: str, master_plan: str, target_chapters: int = 500) -> str:
     """마스터 기획을 설정 DB 항목으로 구조화해 반환하도록 요청한다."""
     guide = {
         '인물': {

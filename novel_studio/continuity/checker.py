@@ -4,7 +4,10 @@ from novel_studio.services.interfaces import ContinuityResult
 
 
 class ContinuityChecker:
-    def __init__(self, db, ai, context): self.db, self.ai, self.context = db, ai, context
+    def __init__(self, db, ai, context):
+        self.db = db
+        self.ai = ai
+        self.context = context
 
     def check_chapter(self, chapter: int, text: str):
         """단일 화 연속성 검사. 취소 시 부분 결과 기록 없이 즉시 중단한다."""
